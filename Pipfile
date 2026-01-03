@@ -10,9 +10,9 @@ numpy = "*"
 yfinance = "*"
 matplotlib = "*"
 seaborn = "*"
-pdfplumber = "*"
 moomoo-api = "*"
 load-dotenv = "*"
+dotenv = "*"
 
 [dev-packages]
 pytest = "*"
