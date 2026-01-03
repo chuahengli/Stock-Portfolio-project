@@ -1,0 +1,22 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+requests = "*"
+pandas = "*"
+numpy = "*"
+yfinance = "*"
+matplotlib = "*"
+seaborn = "*"
+pdfplumber = "*"
+moomoo-api = "*"
+load-dotenv = "*"
+
+[dev-packages]
+pytest = "*"
+ipykernel = "*"
+
+[requires]
+python_version = "3.12"
