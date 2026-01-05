@@ -4,7 +4,8 @@ import subprocess
 from dotenv import load_dotenv
 import moomoo as moomoo
 from moomoo.trade.open_trade_context import OpenSecTradeContext
-from datetime import datetime
+from datetime import datetime,date,timedelta
+import pandas as pd
 from typing import Optional, Dict, List
 
 
@@ -60,13 +61,55 @@ def get_positions(trade_obj: OpenSecTradeContext):
         return data
     else:
         raise Exception('position_list_query error: ', data)
-    
+'''  
 def account_cashflow(trade_obj: OpenSecTradeContext, date:str):
     ret, data = trade_obj.get_acc_cash_flow(clearing_date=date,trd_env="REAL")
     if ret == moomoo.RET_OK:
         return data
     else:
         raise Exception('get_acc_cash_flow error: ', data)
+'''
+def account_cashflow(trade_obj: OpenSecTradeContext):
+    all_cash_flow_data = pd.DataFrame()
+    end_date = datetime.strptime('2023-08-07', '%Y-%m-%d')
+    current_date = datetime.combine(date.today(), datetime.min.time())
+    
+    request_count = 0
+    start_time = time.time()
+
+    while end_date <= current_date:
+        # Rate Limit Check: 20 requests per 30 seconds
+        if request_count >= 20:
+            elapsed = time.time() - start_time
+            if elapsed < 30:
+                wait_time = 30 - elapsed + 1 # Add 1s buffer
+                print(f"Quota used. Waiting {wait_time:.2f}s...")
+                time.sleep(wait_time)
+            # Reset window
+            request_count = 0
+            start_time = time.time()
+
+        date_str = current_date.strftime('%Y-%m-%d')
+        ret, data = trade_obj.get_acc_cash_flow(clearing_date=date_str,trd_env="REAL")
+
+        if ret == moomoo.RET_OK:
+            if not data.empty:
+                all_cash_flow_data = pd.concat([all_cash_flow_data, data], ignore_index=True)
+            request_count += 1
+            current_date -= timedelta(days=1)
+
+        elif ret == moomoo.RET_ERROR:
+        # Handle specific frequency limit error from moomoo
+            if "frequency" in data.lower():
+                print("Hit limit. Cooling down for 30s...")
+                time.sleep(30)
+                start_time = time.time()
+                request_count = 0
+            else:
+                print(f"Error on {date_str}: {data}")
+                break # Exit on non-rate-limit errors
+
+    return all_cash_flow_data
     
 def get_historical_orders(trade_obj: OpenSecTradeContext):
     ret, data = trade_obj.history_order_list_query(start="2023-08-07 00:00:00",end=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
