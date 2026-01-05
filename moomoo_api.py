@@ -17,7 +17,6 @@ def start_opend_headless(opend_path):
             process = subprocess.Popen([opend_path])
         print(f"OpenD started with PID: {process.pid}")
         if process:
-             time.sleep(5) # Wait for 5 seconds to ensure OpenD starts properly
              print("Connecting to OpenD via API...")
              return process
     except FileNotFoundError:
