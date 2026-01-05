@@ -126,12 +126,22 @@ def cleanup_historical_orders(historical_orders:pd.DataFrame):
     historical_orders['Symbol'] = historical_orders['Symbol'].apply(extract_ticker)
     return historical_orders
 
+def cleanup_cashflow(cashflow:pd.DataFrame):
+    cashflow_filter = ['clearing_date','currency','cashflow_type','cashflow_direction','cashflow_amount','cashflow_remark']
+    cashflow = cashflow.loc[:, cashflow_filter]
+    cashflow.rename(columns={'clearing_date':'Date',
+                            'currency':'Currency',
+                            'cashflow_type':'Type',
+                            'cashflow_direction':'IN/OUT',
+                            'cashflow_amount':'Amount',
+                            'cashflow_remark':'Remark'}, inplace=True)
+
 def main():
     trade_obj, process = moomoo_api.start_opend_headless()
     acc_list = moomoo_api.account_list(trade_obj)
     acc_info = moomoo_api.account_info(trade_obj)
     positions = moomoo_api.get_positions(trade_obj)
-    cashflow = moomoo_api.account_cashflow(trade_obj, date=datetime.now().strftime('%Y-%m-%d'))
+    cashflow = moomoo_api.account_cashflow(trade_obj)
     historical_orders = moomoo_api.get_historical_orders(trade_obj)
     trade_obj.close()
     process.terminate()
@@ -147,6 +157,7 @@ def main():
     print(positions)
     historical_orders = cleanup_historical_orders(historical_orders)
     print(historical_orders)
+    print(cashflow)
     return 0
 
 if __name__ == "__main__":
