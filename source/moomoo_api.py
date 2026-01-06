@@ -1,0 +1,124 @@
+import os
+import time
+import subprocess
+from dotenv import load_dotenv
+import moomoo as moomoo
+from moomoo.trade.open_trade_context import OpenSecTradeContext
+from datetime import datetime,date,timedelta
+import pandas as pd
+from typing import Optional, Dict, List
+
+
+
+def start_opend_headless():
+    opend_path = r"moomoo_OpenD_9.6.5618_Windows\OpenD.exe"
+    try:
+        if os.name == 'nt': # Windows
+            process = subprocess.Popen([opend_path], creationflags=subprocess.CREATE_NEW_CONSOLE)
+        else: # Linux/macOS
+            process = subprocess.Popen([opend_path])
+        print(f"OpenD started with PID: {process.pid}")
+        if process:
+             print("Connecting to OpenD via API...")
+    except FileNotFoundError:
+        print(f"Error: OpenD executable not found at {opend_path}")
+        return None
+    
+    time.sleep(5)  # Wait for OpenD to initialize
+    
+    # Get the RSA key path from environment variables
+    load_dotenv()
+    key_path = os.getenv("KEY_PATH")
+    # 1. Configure the RSA private key file globally
+    moomoo.SysConfig.set_init_rsa_file(key_path)
+    # 2. Create the trade context and enable encryption
+    # is_encrypt=True encrypts using RSA key above
+    trade_ctx = OpenSecTradeContext(
+        host='127.0.0.1',
+        port=11111,
+        is_encrypt=True,
+        security_firm="FUTUSG"
+        )
+    return trade_ctx, process
+    
+def account_list(trade_obj: OpenSecTradeContext):
+    ret, data = trade_obj.get_acc_list()
+    if ret == moomoo.RET_OK:
+        return data
+    else:
+        raise Exception('get_acc_list error: ', data)
+    
+def account_info(trade_obj: OpenSecTradeContext):
+    ret, data = trade_obj.accinfo_query(trd_env="REAL",refresh_cache=True,currency="SGD")
+    if ret == moomoo.RET_OK:
+        return data
+    else:
+        raise Exception('accinfo_query error: ', data)
+    
+def get_positions(trade_obj: OpenSecTradeContext):
+    ret, data = trade_obj.position_list_query(trd_env="REAL",refresh_cache=True)
+    if ret == moomoo.RET_OK:
+        return data
+    else:
+        raise Exception('position_list_query error: ', data)
+
+def fetch_cashflow(trade_obj, date_str):
+    ret, data = trade_obj.get_acc_cash_flow(clearing_date=date_str, trd_env="REAL")
+    if ret == moomoo.RET_OK:
+        return data
+    else:
+        if "frequency" in data.lower():
+            print("Hit limit. Cooling down for 30s...")
+        else:
+            print(f"Error on {date_str}: {data}")
+
+def historical_account_cashflow(trade_obj: OpenSecTradeContext):
+    all_cash_flow_data = pd.DataFrame()
+    end_date = datetime.strptime('2023-08-07', '%Y-%m-%d')
+    current_date = datetime.combine(date.today(), datetime.min.time())
+    request_count = 0
+    start_time = time.time()
+    
+    while end_date <= current_date:
+        # Rate Limit Check: 20 requests per 30 seconds
+        if request_count >= 20:
+            elapsed = time.time() - start_time
+            if elapsed < 30:
+                wait_time = 30 - elapsed + 1 # Add 1s buffer
+                print(f"Quota used. Waiting {wait_time:.2f}s...")
+                time.sleep(wait_time)
+            # Reset window
+            request_count = 0
+            start_time = time.time()
+
+        date_str = current_date.strftime('%Y-%m-%d')
+        ret, data = trade_obj.get_acc_cash_flow(clearing_date=date_str, trd_env="REAL")
+
+        if ret == moomoo.RET_OK:
+            if not data.empty:
+                all_cash_flow_data = pd.concat([all_cash_flow_data, data], ignore_index=True)
+            request_count += 1
+            current_date -= timedelta(days=1)
+
+        elif ret == moomoo.RET_ERROR:
+            print(f"Error on {date_str}: {data}")
+            time.sleep(30)
+            start_time = time.time()
+            request_count = 0
+
+    return all_cash_flow_data
+    
+def get_historical_orders(trade_obj: OpenSecTradeContext):
+    ret, data = trade_obj.history_order_list_query(start="2023-08-07 00:00:00",end=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+    if ret == moomoo.RET_OK:
+        return data
+    else:
+        raise Exception('history_order_list_query error: ', data)
+    
+    
+def main():
+    
+    return 0
+
+if __name__ == "__main__":
+    main()
