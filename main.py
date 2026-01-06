@@ -1,7 +1,7 @@
 import moomoo_api
 import preprocessing_to_db
 from datetime import datetime
-import source.database as database
+import database
 
 def main():
     trade_obj, process = moomoo_api.start_opend_headless()
