@@ -60,12 +60,12 @@ def cleanup_positions(positions:pd.DataFrame):
                             'stock_name':'Name',
                             'position_market':'Market',
                             'qty':'Quantity',
-                            'diluted_cost':'Diluted Cost',
-                            'market_val':'Market Value',
-                            'nominal_price':'Current Price',
-                            'pl_ratio':'P/L %',
-                            'pl_val':'P/L',
-                            'today_pl_val':"Today's P/L",
+                            'diluted_cost':'Diluted_Cost',
+                            'market_val':'Market_Value',
+                            'nominal_price':'Current_Price',
+                            'pl_ratio':'P_L_Percent',
+                            'pl_val':'P_L',
+                            'today_pl_val':"Today_s_P_L",
                             'currency':'Currency'}, inplace=True)
     positions['Symbol'] = positions['Symbol'].apply(extract_ticker)
     return positions
@@ -105,10 +105,10 @@ def convert_currency(value, from_currency:str, to_currency:str) -> Optional[floa
 
 def update_portfolio_percentage(pos: pd.DataFrame, total_assets: float) -> None:
     if total_assets == 0:
-        pos['% of Portfolio'] = 0.0
+        pos['Portfolio_Percent'] = 0.0
     else:
-        pos['% of Portfolio'] = (convert_currency(pos['Market Value'],"USD","SGD") / total_assets * 100).round(2)
-        pos['% of Portfolio'] = pos['% of Portfolio'].apply(
+        pos['Portfolio_Percent'] = (convert_currency(pos['Market_Value'],"USD","SGD") / total_assets * 100).round(2)
+        pos['Portfolio_Percent'] = pos['Portfolio_Percent'].apply(
             lambda x: f"{x:.2f}%"
         )
 
@@ -118,11 +118,11 @@ def cleanup_historical_orders(historical_orders:pd.DataFrame):
     historical_orders.rename(columns={'code': 'Symbol',
                             'stock_name':'Name',
                             'order_market':'Market',
-                            'trd_side':'Buy/Sell',
+                            'trd_side':'Buy_Sell',
                             'qty':'Quantity',
-                            'price':'Current Price',
+                            'price':'Current_Price',
                             'currency':'Currency',
-                            'updated_time':'Date & Time'}, inplace=True)
+                            'updated_time':'date_time'}, inplace=True)
     historical_orders['Symbol'] = historical_orders['Symbol'].apply(extract_ticker)
     return historical_orders
 
@@ -132,31 +132,25 @@ def cleanup_cashflow(cashflow:pd.DataFrame):
     cashflow.rename(columns={'clearing_date':'Date',
                             'currency':'Currency',
                             'cashflow_type':'Type',
-                            'cashflow_direction':'IN/OUT',
+                            'cashflow_direction':'in_out',
                             'cashflow_amount':'Amount',
                             'cashflow_remark':'Remark'}, inplace=True)
     cashflow['Amount'] = cashflow['Amount'].round(2)
     return cashflow
 
-def shares(positions:pd.DataFrame):
+def shares_df(positions:pd.DataFrame):
     return positions[positions['Symbol'].str.len() <= 4]
 
-def options(positions:pd.DataFrame):
+def options_df(positions:pd.DataFrame):
     return positions[positions['Symbol'].str.len() > 4]
 
-def portfolio_snapshot_shares_mv(shares:pd.DataFrame):
-    converted_df = shares.loc[:, ['Market Value', 'Currency']].copy()
-    converted_df['Market Value'] = converted_df.apply(
-                                lambda row: convert_currency(row['Market Value'], row['Currency'], 'SGD'), axis=1
+def sum_of_mv(df:pd.DataFrame):
+    converted_df = df.loc[:, ['Market_Value', 'Currency']].copy()
+    converted_df['Market_Value'] = converted_df.apply(
+                                lambda row: convert_currency(row['Market_Value'], row['Currency'], 'SGD'), axis=1
                                 )
-    return converted_df['Market Value'].sum().round(2)
+    return converted_df['Market_Value'].sum().round(2)
 
-def portfolio_snapshot_options_mv(options:pd.DataFrame):
-    converted_df = options.loc[:, ['Market Value', 'Currency']].copy()
-    converted_df['Market Value'] = converted_df.apply(
-                                lambda row: convert_currency(row['Market Value'], row['Currency'], 'SGD'), axis=1
-                                )
-    return converted_df['Market Value'].sum().round(2)
 
 def initial_portfolio_snapshot_df(date_time: str, total_assets:float, shares_mv:float, options_mv:float, cash:float):
     data = {

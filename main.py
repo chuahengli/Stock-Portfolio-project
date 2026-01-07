@@ -28,10 +28,14 @@ def main():
     print(historical_orders)
     print(cashflow)
 
-    shares = preprocessing_to_db.shares(positions)
-    options = preprocessing_to_db.options(positions)
-    shares_mv = preprocessing_to_db.portfolio_snapshot_shares_mv(shares)
-    options_mv = preprocessing_to_db.portfolio_snapshot_options_mv(options)
+    shares = preprocessing_to_db.shares_df(positions)
+    options = preprocessing_to_db.options_df(positions)
+    print(shares)
+    print(options)
+    shares_mv = preprocessing_to_db.sum_of_mv(shares)
+    options_mv = preprocessing_to_db.sum_of_mv(options)
+    print("Shares Market Value (SGD): ", shares_mv)
+    print("Options Market Value (SGD): ", options_mv)
     cash = preprocessing_to_db.get_cash(acc_info)
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     initial_snapshot_df = preprocessing_to_db.initial_portfolio_snapshot_df(
@@ -42,6 +46,11 @@ def main():
         cash
     )
     initial_positions_df = preprocessing_to_db.initial_positions_df(positions, current_time)
+
+    print("Cash (SGD): ", cash)
+    print(initial_snapshot_df)
+    print(initial_positions_df)
+
     database.init_db()
     database.insert_dataframe(initial_snapshot_df, 'portfolio_snapshots')
     database.insert_dataframe(initial_positions_df, 'positions')

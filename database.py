@@ -8,7 +8,7 @@ def init_db():
     # Create portfolio_snapshots table
     portfolio_snapshots_table ="""
     CREATE TABLE IF NOT EXISTS portfolio_snapshots (
-        date_time TEXT,
+        date_time TEXT PRIMARY KEY,
         total_assets REAL,
         stocks REAL,
         options REAL,
@@ -24,7 +24,7 @@ def init_db():
         Name TEXT,
         Market TEXT,
         Quantity REAL,
-        Diluted_cost REAL,
+        Diluted_Cost REAL,
         Market_Value REAL,
         Current_Price REAL,
         P_L_Percent REAL,

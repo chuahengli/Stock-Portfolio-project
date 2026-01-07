@@ -62,16 +62,6 @@ def get_positions(trade_obj: OpenSecTradeContext):
     else:
         raise Exception('position_list_query error: ', data)
 
-def fetch_cashflow(trade_obj, date_str):
-    ret, data = trade_obj.get_acc_cash_flow(clearing_date=date_str, trd_env="REAL")
-    if ret == moomoo.RET_OK:
-        return data
-    else:
-        if "frequency" in data.lower():
-            print("Hit limit. Cooling down for 30s...")
-        else:
-            print(f"Error on {date_str}: {data}")
-
 def historical_account_cashflow(trade_obj: OpenSecTradeContext):
     all_cash_flow_data = pd.DataFrame()
     end_date = datetime.strptime('2023-08-07', '%Y-%m-%d')
