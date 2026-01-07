@@ -62,10 +62,8 @@ def get_positions(trade_obj: OpenSecTradeContext):
     else:
         raise Exception('position_list_query error: ', data)
 
-def historical_account_cashflow(trade_obj: OpenSecTradeContext):
-    all_cash_flow_data = pd.DataFrame()
-    end_date = datetime.strptime('2023-08-07', '%Y-%m-%d')
-    current_date = datetime.combine(date.today(), datetime.min.time())
+def account_cashflow(trade_obj: OpenSecTradeContext, current_date: datetime, end_date: datetime):
+    cash_flow_data = pd.DataFrame()
     request_count = 0
     start_time = time.time()
     
@@ -86,7 +84,7 @@ def historical_account_cashflow(trade_obj: OpenSecTradeContext):
 
         if ret == moomoo.RET_OK:
             if not data.empty:
-                all_cash_flow_data = pd.concat([all_cash_flow_data, data], ignore_index=True)
+                cash_flow_data = pd.concat([cash_flow_data, data], ignore_index=True)
             request_count += 1
             current_date -= timedelta(days=1)
 
@@ -96,7 +94,7 @@ def historical_account_cashflow(trade_obj: OpenSecTradeContext):
             start_time = time.time()
             request_count = 0
 
-    return all_cash_flow_data
+    return cash_flow_data
     
 def get_historical_orders(trade_obj: OpenSecTradeContext):
     ret, data = trade_obj.history_order_list_query(start="2023-08-07 00:00:00",end=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
@@ -104,6 +102,8 @@ def get_historical_orders(trade_obj: OpenSecTradeContext):
         return data
     else:
         raise Exception('history_order_list_query error: ', data)
+    
+
     
     
 def main():

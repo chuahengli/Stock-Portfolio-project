@@ -1,14 +1,16 @@
 import moomoo_api
 import preprocessing_to_db
-from datetime import datetime
+from datetime import date, datetime
 import database
 
 def main():
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    current_date = datetime.combine(date.today(), datetime.min.time())
     trade_obj, process = moomoo_api.start_opend_headless()
     acc_list = moomoo_api.account_list(trade_obj)
     acc_info = moomoo_api.account_info(trade_obj)
     positions = moomoo_api.get_positions(trade_obj)
-    cashflow = moomoo_api.historical_account_cashflow(trade_obj)
+    cashflow = moomoo_api.account_cashflow(trade_obj, current_date, datetime.strptime('2023-08-07', '%Y-%m-%d'))
     historical_orders = moomoo_api.get_historical_orders(trade_obj)
     trade_obj.close()
     process.terminate()
