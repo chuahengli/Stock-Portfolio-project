@@ -1,63 +1,59 @@
 import moomoo_api
 import preprocessing_to_db
-from datetime import date, datetime
+from datetime import date, datetime,timedelta
 import database
+import os
+
+'''
+TESTING PURPOSES ONLY
+
+current_date = [
+                datetime.combine(date.today(), datetime.min.time()),
+                datetime.combine(date.today(), datetime.min.time()) - timedelta(days=30),
+                datetime.combine(date.today(), datetime.min.time()) - timedelta(days=60),
+                datetime.combine(date.today(), datetime.min.time()) - timedelta(days=90),
+                datetime.strptime('2023-08-07', '%Y-%m-%d')
+                ]
+current_time = [
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S"),
+                (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d %H:%M:%S"),
+                (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d %H:%M:%S")
+                ]
+'''
+
+def initialise(current_time: datetime, current_date: datetime, end_date: datetime):
+        
+    acc_info, positions, cashflow, historical_orders = moomoo_api.run(current_date, end_date)
+
+
+    snapshot_df, positions_df, historical_orders, cashflow = preprocessing_to_db.run(acc_info, positions, cashflow, historical_orders, current_time)
+
+    database.run(snapshot_df, positions_df, historical_orders, cashflow, current_time)
+
+    print("Database initialized successfully.")
+    return 0
+
+def update(current_time: datetime, current_date: datetime, end_date: datetime):
+    acc_info, positions, cashflow, historical_orders = moomoo_api.run(current_date, end_date)
+
+
+    snapshot_df, positions_df, historical_orders, cashflow = preprocessing_to_db.run(acc_info, positions, cashflow, historical_orders, current_time)
+    database.run(snapshot_df, positions_df, historical_orders, cashflow, current_time)
+    print("Database updated successfully.")
+    return 0
 
 def main():
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    current_date = datetime.combine(date.today(), datetime.min.time())
-    trade_obj, process = moomoo_api.start_opend_headless()
-    acc_list = moomoo_api.account_list(trade_obj)
-    acc_info = moomoo_api.account_info(trade_obj)
-    positions = moomoo_api.get_positions(trade_obj)
-    cashflow = moomoo_api.account_cashflow(trade_obj, current_date, datetime.strptime('2023-08-07', '%Y-%m-%d'))
-    historical_orders = moomoo_api.get_historical_orders(trade_obj)
-    trade_obj.close()
-    process.terminate()
+    if not os.path.exists('moomoo_portfolio.db'):
+        initialise((datetime.now() - timedelta(days=30))
+                    , datetime.combine(date.today(), datetime.min.time()) - timedelta(days=30)
+                    , datetime.combine(date.today(), datetime.min.time()) - timedelta(days=60))
+    else:
+        print("Database already exists. Initialization skipped.")
+        update(datetime.now(),
+               datetime.combine(date.today(), datetime.min.time()),
+               datetime.combine(date.today(), datetime.min.time()) - timedelta(days=30))
 
-    acc_info = preprocessing_to_db.cleanup_acc_info(acc_info)
-    positions = preprocessing_to_db.cleanup_positions(positions)
-    preprocessing_to_db.update_portfolio_percentage(positions, preprocessing_to_db.get_total_assets(acc_info))
-    historical_orders = preprocessing_to_db.cleanup_historical_orders(historical_orders)
-    cashflow = preprocessing_to_db.cleanup_cashflow(cashflow)
-
-    print(acc_info)
-    print ("Total Assets: ",preprocessing_to_db.get_total_assets(acc_info))
-    print ("Securities: ",preprocessing_to_db.get_securities(acc_info))
-    print ("Cash: ",preprocessing_to_db.get_cash(acc_info))
-    print ("Bonds: ",preprocessing_to_db.get_bonds(acc_info))
-    print(positions)
-    print(historical_orders)
-    print(cashflow)
-
-    shares = preprocessing_to_db.shares_df(positions)
-    options = preprocessing_to_db.options_df(positions)
-    print(shares)
-    print(options)
-    shares_mv = preprocessing_to_db.sum_of_mv(shares)
-    options_mv = preprocessing_to_db.sum_of_mv(options)
-    print("Shares Market Value (SGD): ", shares_mv)
-    print("Options Market Value (SGD): ", options_mv)
-    cash = preprocessing_to_db.get_cash(acc_info)
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    initial_snapshot_df = preprocessing_to_db.initial_portfolio_snapshot_df(
-        current_time,
-        preprocessing_to_db.get_total_assets(acc_info),
-        shares_mv,
-        options_mv,
-        cash
-    )
-    initial_positions_df = preprocessing_to_db.initial_positions_df(positions, current_time)
-
-    print("Cash (SGD): ", cash)
-    print(initial_snapshot_df)
-    print(initial_positions_df)
-
-    database.init_db()
-    database.insert_dataframe(initial_snapshot_df, 'portfolio_snapshots')
-    database.insert_dataframe(initial_positions_df, 'positions')
-    database.insert_dataframe(historical_orders, 'historical_orders')
-    database.insert_dataframe(cashflow, 'cashflow')
     return 0
 
 

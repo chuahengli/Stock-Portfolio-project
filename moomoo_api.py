@@ -106,8 +106,24 @@ def get_historical_orders(trade_obj: OpenSecTradeContext):
 
     
     
+def run(current_date: datetime, end_date: datetime): 
+    trade_obj, process = start_opend_headless()
+    acc_list = account_list(trade_obj)
+    acc_info = account_info(trade_obj)
+    positions = get_positions(trade_obj)
+    cashflow = account_cashflow(trade_obj, current_date, end_date)
+    historical_orders = get_historical_orders(trade_obj)
+    trade_obj.close()
+    process.terminate()
+
+    print(acc_info)
+    print(positions)
+    print(cashflow)
+    print(historical_orders)
+
+    return acc_info, positions, cashflow, historical_orders
+
 def main():
-    
     return 0
 
 if __name__ == "__main__":
