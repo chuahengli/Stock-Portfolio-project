@@ -22,14 +22,14 @@ def cleanup_acc_info(acc_info:pd.DataFrame):
 
 def get_cash(acc_info: pd.DataFrame) -> float:
 
-    cash_columns = ['fund_assets', 'cash', 'pending_asset', 'frozen_cash', 'avl_withdrawal_cash',]
+    cash_columns = ['fund_assets', 'cash']
     return acc_info[cash_columns].sum(axis=1)[0].round(2)
 
 def get_total_assets(acc_info: pd.DataFrame) -> float:
     return acc_info['total_assets'][0].round(2)
 
-def get_securities(acc_info: pd.DataFrame) -> float:
-    return acc_info['securities_assets'][0].round(2)
+def get_equity(acc_info: pd.DataFrame) -> float:
+    return acc_info['securities_assets'][0].round(2) - get_cash(acc_info)
 
 def get_bonds(acc_info: pd.DataFrame) -> float:
     return acc_info['bond_assets'][0].round(2)
@@ -114,11 +114,12 @@ def update_portfolio_percentage(pos: pd.DataFrame, total_assets: float) -> None:
 
 def cleanup_historical_orders(historical_orders:pd.DataFrame):
     historical_orders = historical_orders.loc[historical_orders['order_status'] == 'FILLED_ALL', 
-                                          ['code', 'stock_name','order_market', 'trd_side','qty', 'price','currency','updated_time']]
+                                          ['code', 'stock_name','order_market', 'trd_side','order_id','qty', 'price','currency','updated_time']]
     historical_orders.rename(columns={'code': 'Symbol',
                             'stock_name':'Name',
                             'order_market':'Market',
                             'trd_side':'Buy_Sell',
+                            'order_id':'Order_ID',
                             'qty':'Quantity',
                             'price':'Current_Price',
                             'currency':'Currency',
@@ -127,7 +128,7 @@ def cleanup_historical_orders(historical_orders:pd.DataFrame):
     return historical_orders
 
 def cleanup_cashflow(cashflow:pd.DataFrame):
-    cashflow_filter = ['clearing_date','currency','cashflow_type','cashflow_direction','cashflow_amount','cashflow_remark']
+    cashflow_filter = ['cashflow_id','clearing_date','currency','cashflow_type','cashflow_direction','cashflow_amount','cashflow_remark']
     cashflow = cashflow.loc[:, cashflow_filter]
     cashflow.rename(columns={'clearing_date':'Date',
                             'currency':'Currency',
@@ -138,11 +139,15 @@ def cleanup_cashflow(cashflow:pd.DataFrame):
     cashflow['Amount'] = cashflow['Amount'].round(2)
     return cashflow
 
-def shares_df(positions:pd.DataFrame):
-    return positions[positions['Symbol'].str.len() <= 4]
+def separate_assets(positions:pd.DataFrame):
+    # Regex for Option: Root + 6 digits (date) + C/P + 8 digits (strike)
+    option_pattern = r'[A-Z]+\d{6}[CP]\d+'
+    # Create a boolean mask
+    is_option = positions['Symbol'].str.contains(option_pattern, regex=True)
+    df_options = positions[is_option].copy()
+    df_stocks = positions[~is_option].copy()
 
-def options_df(positions:pd.DataFrame):
-    return positions[positions['Symbol'].str.len() > 4]
+    return df_stocks, df_options
 
 def sum_of_mv(df:pd.DataFrame):
     converted_df = df.loc[:, ['Market_Value', 'Currency']].copy()
@@ -152,19 +157,17 @@ def sum_of_mv(df:pd.DataFrame):
     return converted_df['Market_Value'].sum().round(2)
 
 
-def initial_portfolio_snapshot_df(date_time: str, total_assets:float, shares_mv:float, options_mv:float, cash:float):
+def portfolio_snapshot_table(date_time: str, total_assets:float, shares_mv:float, options_mv:float, cash:float):
     data = {
         'date_time': [date_time],
         'total_assets': [total_assets],
         'stocks': [shares_mv],
         'options': [options_mv],
-        'cash': [cash],
-        'nav': [total_assets/1000],
-        'units': [1000.0]
+        'cash': [cash]
     }
     snapshot_df = pd.DataFrame(data)
     return snapshot_df
-def initial_positions_df(positions:pd.DataFrame, date_time: str):
+def positions_table(positions:pd.DataFrame, date_time: str):
     positions_df = positions.copy()
     positions_df['date_time'] = date_time
     return positions_df
@@ -172,8 +175,48 @@ def initial_positions_df(positions:pd.DataFrame, date_time: str):
 
 
 
+
+
+def run(acc_info: pd.DataFrame, positions: pd.DataFrame, cashflow: pd.DataFrame, historical_orders: pd.DataFrame, current_time: datetime):
+    acc_info = cleanup_acc_info(acc_info)
+    positions = cleanup_positions(positions)
+    update_portfolio_percentage(positions, get_total_assets(acc_info))
+    historical_orders = cleanup_historical_orders(historical_orders)
+    cashflow = cleanup_cashflow(cashflow)
+
+    print(acc_info)
+    print ("Total Assets: ",get_total_assets(acc_info))
+    print ("Equity: ",get_equity(acc_info))
+    print ("Cash: ",get_cash(acc_info))
+    print ("Bonds: ",get_bonds(acc_info))
+    print(positions)
+    print(historical_orders)
+    print(cashflow)
+
+    shares, options = separate_assets(positions)
+    print(shares)
+    print(options)
+    shares_mv = sum_of_mv(shares)
+    options_mv = sum_of_mv(options)
+    print("Shares Market Value (SGD): ", shares_mv)
+    print("Options Market Value (SGD): ", options_mv)
+    cash = get_cash(acc_info)
+    date_str = current_time.strftime("%Y-%m-%d %H:%M:%S")
+    snapshot_df = portfolio_snapshot_table(
+        date_str,
+        get_total_assets(acc_info),
+        shares_mv,
+        options_mv,
+        cash
+    )
+    positions_df = positions_table(positions, date_str)
+
+    print("Cash (SGD): ", cash)
+    print(snapshot_df)
+    print(positions_df)
+    return snapshot_df, positions_df, historical_orders, cashflow
+
 def main():
-    
     return 0
 
 if __name__ == "__main__":
