@@ -10,7 +10,7 @@ def init_db():
     # Create portfolio_snapshots table
     portfolio_snapshots_table ="""
     CREATE TABLE IF NOT EXISTS portfolio_snapshots (
-        date_time TEXT PRIMARY KEY,
+        date TEXT PRIMARY KEY,
         total_assets NUMERIC,
         stocks NUMERIC,
         options NUMERIC,
@@ -35,8 +35,8 @@ def init_db():
         Today_s_P_L NUMERIC,
         Currency TEXT,
         Portfolio_Percent REAL,
-        date_time TEXT,
-        FOREIGN KEY (date_time) REFERENCES portfolio_snapshots (date_time)
+        date TEXT,
+        FOREIGN KEY (date) REFERENCES portfolio_snapshots (date)
     )
     """
     # Create historical_orders table
@@ -105,7 +105,7 @@ def insert_dataframe(df:pd.DataFrame, table_name:str):
         conn.close()
 def prev_nav_units():
     conn = sqlite3.connect('moomoo_portfolio.db')
-    query = "SELECT nav, units FROM portfolio_snapshots ORDER BY date_time DESC LIMIT 1"
+    query = "SELECT nav, units FROM portfolio_snapshots ORDER BY date DESC LIMIT 1"
     prev_df = pd.read_sql_query(query, conn)
     conn.commit()
     conn.close()
@@ -125,10 +125,10 @@ def net_cashflow(date_str: str):
     net_cash_flow = today_cf_df['Amount'].sum() if not today_cf_df.empty else 0.0
     return net_cash_flow
 
-def calc_nav_units(current_time: datetime, snapshot_df: pd.DataFrame):
+def calc_nav_units(current_date: datetime, snapshot_df: pd.DataFrame):
     total_assets = snapshot_df.loc[0, 'total_assets']
     # Based on today's cash flow, DO the NAV calculation
-    date_str = current_time.strftime('%Y-%m-%d')
+    date_str = current_date.strftime('%Y-%m-%d')
     net_cf = net_cashflow(date_str)
     prev_nav, prev_units = prev_nav_units()
     if prev_units == 0:
@@ -143,21 +143,21 @@ def calc_nav_units(current_time: datetime, snapshot_df: pd.DataFrame):
     print(f"Update Complete. New NAV: {new_nav:.4f}, Net CF: {net_cf:.2f}, New Units: {new_units:.4f}")
     return new_nav, new_units
 
+def check_date_exists(date_str: str) -> bool:
+    conn = sqlite3.connect('moomoo_portfolio.db')
+    cursor = conn.cursor()
+    try:
+        query = "SELECT 1 FROM portfolio_snapshots WHERE date = ?"
+        cursor.execute(query, (date_str,))
+        result = cursor.fetchone()
+    except sqlite3.OperationalError:
+        # Table might not exist yet
+        result = None
+    conn.close()
+    return result is not None
 
 def run(snapshot_df: pd.DataFrame, positions_df: pd.DataFrame, historical_orders: pd.DataFrame, cashflow: pd.DataFrame, current_time: datetime):
-    init_db()
-    insert_dataframe(positions_df, 'positions')
-    insert_dataframe(historical_orders, 'historical_orders')
-    if cashflow.empty:
-        print("Skipping cashflow database update due to empty results.")
-    else:
-        insert_dataframe(cashflow, 'cashflow')
-
-    nav, units = calc_nav_units(current_time, snapshot_df)
-    snapshot_df.loc[0, 'nav'] = nav
-    snapshot_df.loc[0, 'units'] = units
-
-    insert_dataframe(snapshot_df, 'portfolio_snapshots')
+    
     return 0
 
 def main():

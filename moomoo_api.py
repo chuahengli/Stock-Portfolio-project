@@ -127,47 +127,6 @@ def get_historical_orders(trade_obj: OpenSecTradeContext):
         raise Exception('history_order_list_query error: ', data)
     
 
-    
-    
-def run(current_date: datetime, end_date: datetime): 
-    proc_handle, was_already_running = manage_opend()
-    trade_ctx = None
-    # Initialize variables to None to prevent UnboundLocalError if an exception occurs early
-    acc_info, positions, cashflow, historical_orders = None, None, None, None
-    try:
-        trade_ctx = configure_moomoo_api()
-        acc_list = account_list(trade_ctx)
-        acc_info = account_info(trade_ctx)
-        positions = get_positions(trade_ctx)
-        cashflow = account_cashflow(trade_ctx, current_date, end_date)
-        historical_orders = get_historical_orders(trade_ctx)
-
-    except Exception as e:
-        print(f"API Error: {e}")
-    finally:
-        if trade_ctx:
-            trade_ctx.close()
-        #KILL THE PROCESS
-        # If we started it, OR if you want it dead regardless:
-        if proc_handle:
-            print("Shutting down OpenD...")
-            proc_handle.terminate() # Gentle request to close
-            
-            # Wait 2 seconds, if still alive, kill it forcefully
-            try:
-                proc_handle.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                print("OpenD didn't close, forcing kill...")
-                proc_handle.kill()
-
-    
-
-    print(acc_info)
-    print(positions)
-    print(cashflow)
-    print(historical_orders)
-
-    return acc_info, positions, cashflow, historical_orders
 
 def main():
     return 0
