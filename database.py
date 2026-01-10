@@ -148,7 +148,10 @@ def run(snapshot_df: pd.DataFrame, positions_df: pd.DataFrame, historical_orders
     init_db()
     insert_dataframe(positions_df, 'positions')
     insert_dataframe(historical_orders, 'historical_orders')
-    insert_dataframe(cashflow, 'cashflow')
+    if cashflow.empty:
+        print("Skipping cashflow database update due to empty results.")
+    else:
+        insert_dataframe(cashflow, 'cashflow')
 
     nav, units = calc_nav_units(current_time, snapshot_df)
     snapshot_df.loc[0, 'nav'] = nav
