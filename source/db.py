@@ -1,10 +1,13 @@
+from source.cleanup import convert_currency,get_exchange_rate
+from config import settings 
+
 import sqlite3
 import pandas as pd
 from datetime import datetime
-from preprocessing_to_db import convert_currency,get_exchange_rate
+
 
 def init_db():
-    conn = sqlite3.connect('moomoo_portfolio.db')
+    conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH))
     cursor = conn.cursor()
 
     # Create portfolio_snapshots table
@@ -73,7 +76,7 @@ def init_db():
     conn.close()
 
 def table_empty(table_name:str):
-    conn = sqlite3.connect('moomoo_portfolio.db')
+    conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH))
     cursor = conn.cursor()
     query = f"SELECT EXISTS (SELECT 1 FROM {table_name}) AS result;"
     # 0 if empty, 1 if not empty
@@ -85,12 +88,12 @@ def table_empty(table_name:str):
 
 def insert_dataframe(df:pd.DataFrame, table_name:str):
     if table_empty(table_name):
-        conn = sqlite3.connect('moomoo_portfolio.db')
+        conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH))
         df.to_sql(table_name, conn, if_exists='append', index=False)
         conn.commit()
         conn.close()
     elif not table_empty(table_name):
-        conn = sqlite3.connect('moomoo_portfolio.db')
+        conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH))
         # Upload DataFrame to a staging table
         df.to_sql('temp_staging', conn, if_exists='replace', index=False)
         # Define columns in df to place in columns in sql db table
@@ -104,7 +107,7 @@ def insert_dataframe(df:pd.DataFrame, table_name:str):
         conn.commit()
         conn.close()
 def prev_nav_units():
-    conn = sqlite3.connect('moomoo_portfolio.db')
+    conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH))
     query = "SELECT nav, units FROM portfolio_snapshots ORDER BY date DESC LIMIT 1"
     prev_df = pd.read_sql_query(query, conn)
     conn.commit()
@@ -115,7 +118,7 @@ def prev_nav_units():
 
 
 def net_cashflow(date_str: str):
-    conn = sqlite3.connect('moomoo_portfolio.db')
+    conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH))
     query = f"SELECT cashflow_id, Date, Currency, Amount FROM cashflow where Date = '{date_str}'"
     today_cf_df = pd.read_sql_query(query, conn)
     if not today_cf_df.empty:
@@ -144,7 +147,7 @@ def calc_nav_units(current_date: datetime, snapshot_df: pd.DataFrame):
     return new_nav, new_units
 
 def check_date_exists(date_str: str) -> bool:
-    conn = sqlite3.connect('moomoo_portfolio.db')
+    conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH))
     cursor = conn.cursor()
     try:
         query = "SELECT 1 FROM portfolio_snapshots WHERE date = ?"
@@ -156,9 +159,6 @@ def check_date_exists(date_str: str) -> bool:
     conn.close()
     return result is not None
 
-def run(snapshot_df: pd.DataFrame, positions_df: pd.DataFrame, historical_orders: pd.DataFrame, cashflow: pd.DataFrame, current_time: datetime):
-    
-    return 0
 
 def main():
     return 0

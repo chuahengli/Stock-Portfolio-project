@@ -1,7 +1,6 @@
-import moomoo_api
-import preprocessing_to_db
+from source import moomoo_api, cleanup, db
+from config import settings
 from datetime import date, datetime,timedelta
-import database
 import os
 import subprocess
 
@@ -63,73 +62,73 @@ def upload_to_db(current_date: datetime, end_date: datetime):
     print(historical_orders)
 
     ## Cleanup to upload to db
-    acc_info = preprocessing_to_db.cleanup_acc_info(acc_info)
-    positions = preprocessing_to_db.cleanup_positions(positions)
-    preprocessing_to_db.update_portfolio_percentage(positions, preprocessing_to_db.get_total_assets(acc_info))
-    historical_orders = preprocessing_to_db.cleanup_historical_orders(historical_orders)
-    cashflow = preprocessing_to_db.cleanup_cashflow(cashflow)
+    acc_info = cleanup.cleanup_acc_info(acc_info)
+    positions = cleanup.cleanup_positions(positions)
+    cleanup.update_portfolio_percentage(positions, cleanup.get_total_assets(acc_info))
+    historical_orders = cleanup.cleanup_historical_orders(historical_orders)
+    cashflow = cleanup.cleanup_cashflow(cashflow)
 
     print(acc_info)
-    print ("Total Assets: ",preprocessing_to_db.get_total_assets(acc_info))
-    print ("Equity: ",preprocessing_to_db.get_equity(acc_info))
-    print ("Cash: ",preprocessing_to_db.get_cash(acc_info))
-    print ("Bonds: ",preprocessing_to_db.get_bonds(acc_info))
+    print ("Total Assets: ",cleanup.get_total_assets(acc_info))
+    print ("Equity: ",cleanup.get_equity(acc_info))
+    print ("Cash: ",cleanup.get_cash(acc_info))
+    print ("Bonds: ",cleanup.get_bonds(acc_info))
     print(positions)
     print(historical_orders)
     print(cashflow)
     # Calculate shares, options and cash to place into portfolio snapshot
-    shares, options = preprocessing_to_db.separate_assets(positions)
+    shares, options = cleanup.separate_assets(positions)
     print(shares)
     print(options)
-    shares_mv = preprocessing_to_db.sum_of_mv(shares)
-    options_mv = preprocessing_to_db.sum_of_mv(options)
+    shares_mv = cleanup.sum_of_mv(shares)
+    options_mv = cleanup.sum_of_mv(options)
     print("Shares Market Value (SGD): ", shares_mv)
     print("Options Market Value (SGD): ", options_mv)
-    cash = preprocessing_to_db.get_cash(acc_info)
+    cash = cleanup.get_cash(acc_info)
     date_str = current_date.strftime("%Y-%m-%d")
     # Set up snapshot_df and positions_df to place into db
-    snapshot_df = preprocessing_to_db.portfolio_snapshot_table(
+    snapshot_df = cleanup.portfolio_snapshot_table(
         date_str,
-        preprocessing_to_db.get_total_assets(acc_info),
+        cleanup.get_total_assets(acc_info),
         shares_mv,
         options_mv,
         cash
     )
-    positions_df = preprocessing_to_db.positions_table(positions, date_str)
+    positions_df = cleanup.positions_table(positions, date_str)
 
     print("Cash (SGD): ", cash)
     print(snapshot_df)
     print(positions_df)
 
     ## Initialise and upload dataframes to db
-    database.init_db()
-    database.insert_dataframe(positions_df, 'positions')
-    database.insert_dataframe(historical_orders, 'historical_orders')
+    db.init_db()
+    db.insert_dataframe(positions_df, 'positions')
+    db.insert_dataframe(historical_orders, 'historical_orders')
     # Check if cashflow dataframe is empty
     if cashflow.empty:
         print("Skipping cashflow database update due to empty results.")
     else:
-        database.insert_dataframe(cashflow, 'cashflow')
+        db.insert_dataframe(cashflow, 'cashflow')
     # Calculate and update nav for Time Weighted Returns(TWR)
-    nav, units = database.calc_nav_units(current_date, snapshot_df)
+    nav, units = db.calc_nav_units(current_date, snapshot_df)
     snapshot_df.loc[0, 'nav'] = nav
     snapshot_df.loc[0, 'units'] = units
 
-    database.insert_dataframe(snapshot_df, 'portfolio_snapshots')
+    db.insert_dataframe(snapshot_df, 'portfolio_snapshots')
 
     return 0
 
 
 
 def main():
-    if not os.path.exists('moomoo_portfolio.db'):
+    if not os.path.exists(settings.MOOMOO_PORTFOLIO_DB_PATH):
         upload_to_db(datetime.combine(date.today(), datetime.min.time()) - timedelta(days=30)
                     , datetime.combine(date.today(), datetime.min.time()) - timedelta(days=60))
         print("Database initialized successfully.")
     else:
         print("Database already exists. Initialization skipped.")
         today_str = datetime.now().strftime("%Y-%m-%d")
-        if database.check_date_exists(today_str):
+        if db.check_date_exists(today_str):
             print(f"Portfolio snapshot for {today_str} already exists. Skipping run.")
             return 0
 
