@@ -13,6 +13,7 @@ seaborn = "*"
 moomoo-api = "*"
 load-dotenv = "*"
 dotenv = "*"
+psutil = "*"
 
 [dev-packages]
 pytest = "*"
