@@ -1,17 +1,18 @@
+import moomoo as moomoo
+from moomoo.trade.open_trade_context import OpenSecTradeContext
+from config import settings
+
 import os
 import time
 import subprocess
 from dotenv import load_dotenv
-import moomoo as moomoo
-from moomoo.trade.open_trade_context import OpenSecTradeContext
 from datetime import datetime,date,timedelta
 import pandas as pd
 from typing import Optional, Dict, List
 import psutil
 
 def manage_opend():
-    opend_path = r"moomoo_OpenD_9.6.5618_Windows\OpenD.exe"
-
+    opend_path = str(settings.OPEND_PATH)
     # Check if OpenD is already running
     existing_proc = None
     for proc in psutil.process_iter(['name', 'pid']):
