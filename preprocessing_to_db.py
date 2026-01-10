@@ -157,9 +157,9 @@ def sum_of_mv(df:pd.DataFrame):
     return converted_df['Market_Value'].sum().round(2)
 
 
-def portfolio_snapshot_table(date_time: str, total_assets:float, shares_mv:float, options_mv:float, cash:float):
+def portfolio_snapshot_table(date: str, total_assets:float, shares_mv:float, options_mv:float, cash:float):
     data = {
-        'date_time': [date_time],
+        'date': [date],
         'total_assets': [total_assets],
         'stocks': [shares_mv],
         'options': [options_mv],
@@ -167,54 +167,11 @@ def portfolio_snapshot_table(date_time: str, total_assets:float, shares_mv:float
     }
     snapshot_df = pd.DataFrame(data)
     return snapshot_df
-def positions_table(positions:pd.DataFrame, date_time: str):
+def positions_table(positions:pd.DataFrame, date: str):
     positions_df = positions.copy()
-    positions_df['date_time'] = date_time
+    positions_df['date'] = date
     return positions_df
 
-
-
-
-
-
-def run(acc_info: pd.DataFrame, positions: pd.DataFrame, cashflow: pd.DataFrame, historical_orders: pd.DataFrame, current_time: datetime):
-    acc_info = cleanup_acc_info(acc_info)
-    positions = cleanup_positions(positions)
-    update_portfolio_percentage(positions, get_total_assets(acc_info))
-    historical_orders = cleanup_historical_orders(historical_orders)
-    cashflow = cleanup_cashflow(cashflow)
-
-    print(acc_info)
-    print ("Total Assets: ",get_total_assets(acc_info))
-    print ("Equity: ",get_equity(acc_info))
-    print ("Cash: ",get_cash(acc_info))
-    print ("Bonds: ",get_bonds(acc_info))
-    print(positions)
-    print(historical_orders)
-    print(cashflow)
-
-    shares, options = separate_assets(positions)
-    print(shares)
-    print(options)
-    shares_mv = sum_of_mv(shares)
-    options_mv = sum_of_mv(options)
-    print("Shares Market Value (SGD): ", shares_mv)
-    print("Options Market Value (SGD): ", options_mv)
-    cash = get_cash(acc_info)
-    date_str = current_time.strftime("%Y-%m-%d %H:%M:%S")
-    snapshot_df = portfolio_snapshot_table(
-        date_str,
-        get_total_assets(acc_info),
-        shares_mv,
-        options_mv,
-        cash
-    )
-    positions_df = positions_table(positions, date_str)
-
-    print("Cash (SGD): ", cash)
-    print(snapshot_df)
-    print(positions_df)
-    return snapshot_df, positions_df, historical_orders, cashflow
 
 def main():
     return 0
