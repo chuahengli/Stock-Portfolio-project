@@ -15,6 +15,7 @@ load-dotenv = "*"
 dotenv = "*"
 psutil = "*"
 pathlib = "*"
+sqlalchemy = "*"
 
 [dev-packages]
 pytest = "*"

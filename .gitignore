@@ -1,10 +1,14 @@
 /.env
-/moomoo_OpenD_9.6.5618_Windows/
-__pycache__/
-.ipynb_checkpoints/
+moomoo_OpenD_9.6.5618_Windows
+__pycache__
+/.ipynb_checkpoints/
+.aiexclude
 
 
 main.ipynb
 moomoo_api.ipynb
 update_db.ipynb
-moomoo_portfolio.db
+db/
+
+run_daily.bat
+daily_log.txt

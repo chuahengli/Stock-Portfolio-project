@@ -27,7 +27,7 @@ def get_cash(acc_info: pd.DataFrame) -> float:
 def get_total_assets(acc_info: pd.DataFrame) -> float:
     return acc_info['total_assets'][0].round(2)
 
-def get_equity(acc_info: pd.DataFrame) -> float:
+def get_securities_assets(acc_info: pd.DataFrame) -> float:
     return acc_info['securities_assets'][0].round(2) - get_cash(acc_info)
 
 def get_bonds(acc_info: pd.DataFrame) -> float:
@@ -136,6 +136,13 @@ def cleanup_cashflow(cashflow:pd.DataFrame):
                             'cashflow_amount':'Amount',
                             'cashflow_remark':'Remark'}, inplace=True)
     cashflow['Amount'] = cashflow['Amount'].round(2)
+    # Define the "Noise" keywords to exclude
+    noise_keywords = ['Dividend', 'Tax', 'Fund']
+    noise_pattern = '|'.join(noise_keywords)
+    # Keep rows where 'Type' is relevant AND 'Remark' does NOT contain noise
+    is_relevant_type = cashflow['Type'].isin(['Others', 'Bank Transfer Withdrawals', 'Bank Transfer Deposits','Coupon'])
+    is_not_noise = ~cashflow['Remark'].str.contains(noise_pattern, case=False, na=False)
+    cashflow['is_external'] = is_relevant_type & is_not_noise
     return cashflow
 
 def separate_assets(positions:pd.DataFrame):
