@@ -25,7 +25,6 @@ def init_db():
     # Create the Positions table
     positions_table = """
     CREATE TABLE IF NOT EXISTS positions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
         Symbol TEXT,
         Name TEXT,
         Market TEXT,
@@ -39,7 +38,8 @@ def init_db():
         Currency TEXT,
         Portfolio_Percent REAL,
         date TEXT,
-        FOREIGN KEY (date) REFERENCES portfolio_snapshots (date)
+        FOREIGN KEY (date) REFERENCES portfolio_snapshots (date),
+        PRIMARY KEY(Symbol, date) ON CONFLICT REPLACE
     )
     """
     # Create historical_orders table
@@ -65,7 +65,8 @@ def init_db():
         Type TEXT,
         in_out TEXT,
         Amount NUMERIC,
-        Remark TEXT
+        Remark TEXT,
+        is_external NUMERIC
     )
     """
     cursor.execute(portfolio_snapshots_table)
@@ -119,7 +120,7 @@ def prev_nav_units():
 
 def net_cashflow(date_str: str):
     conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH))
-    query = f"SELECT cashflow_id, Date, Currency, Amount FROM cashflow where Date = '{date_str}'"
+    query = f"SELECT cashflow_id, Date, Currency, Amount FROM cashflow where Date = '{date_str}' AND is_external = 1"
     today_cf_df = pd.read_sql_query(query, conn)
     if not today_cf_df.empty:
         today_cf_df['Amount'] = today_cf_df.apply(lambda x: convert_currency(x['Amount'], x['Currency'], 'SGD'), axis=1)

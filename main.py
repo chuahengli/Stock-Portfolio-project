@@ -14,12 +14,7 @@ current_date = [
                 datetime.combine(date.today(), datetime.min.time()) - timedelta(days=90),
                 datetime.strptime('2023-08-07', '%Y-%m-%d')
                 ]
-current_time = [
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S"),
-                (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d %H:%M:%S"),
-                (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d %H:%M:%S")
-                ]
+                
 '''
 
 def upload_to_db(current_date: datetime, end_date: datetime):
@@ -70,7 +65,7 @@ def upload_to_db(current_date: datetime, end_date: datetime):
 
     print(acc_info)
     print ("Total Assets: ",cleanup.get_total_assets(acc_info))
-    print ("Equity: ",cleanup.get_equity(acc_info))
+    print ("Securities assets: ",cleanup.get_securities_assets(acc_info))
     print ("Cash: ",cleanup.get_cash(acc_info))
     print ("Bonds: ",cleanup.get_bonds(acc_info))
     print(positions)
@@ -121,9 +116,11 @@ def upload_to_db(current_date: datetime, end_date: datetime):
 
 
 def main():
+    today_date = datetime.combine(date.today(), datetime.min.time())
+    beginning_date = datetime.strptime('2023-08-07', '%Y-%m-%d')
     if not os.path.exists(settings.MOOMOO_PORTFOLIO_DB_PATH):
-        upload_to_db(datetime.combine(date.today(), datetime.min.time()) - timedelta(days=30)
-                    , datetime.combine(date.today(), datetime.min.time()) - timedelta(days=60))
+        upload_to_db(today_date,
+                      beginning_date)
         print("Database initialized successfully.")
     else:
         print("Database already exists. Initialization skipped.")
@@ -132,8 +129,8 @@ def main():
             print(f"Portfolio snapshot for {today_str} already exists. Skipping run.")
             return 0
 
-        upload_to_db(datetime.combine(date.today(), datetime.min.time()),
-               datetime.combine(date.today(), datetime.min.time()) - timedelta(days=30))
+        upload_to_db(today_date,
+                     today_date - timedelta(days=30))
         print("Database updated successfully.")
 
     return 0
