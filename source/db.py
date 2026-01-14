@@ -69,10 +69,22 @@ def init_db():
         is_external NUMERIC
     )
     """
+    # Create net_p_l table
+    net_p_l_table = """
+    CREATE TABLE IF NOT EXISTS net_p_l (
+        Symbol TEXT,
+        Market TEXT,
+        Currency TEXT,
+        Net_P_L NUMERIC,
+        PRIMARY KEY(Symbol, Market, Currency)
+    )
+    """
+    
     cursor.execute(portfolio_snapshots_table)
     cursor.execute(positions_table)
     cursor.execute(historical_orders_table)
     cursor.execute(cashflow_table)
+    cursor.execute(net_p_l_table)
     conn.commit()
     conn.close()
 
@@ -88,25 +100,22 @@ def table_empty(table_name:str):
     return count == 0
 
 def insert_dataframe(df:pd.DataFrame, table_name:str):
-    if table_empty(table_name):
-        conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH))
-        df.to_sql(table_name, conn, if_exists='append', index=False)
-        conn.commit()
-        conn.close()
-    elif not table_empty(table_name):
-        conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH))
+    conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH))
+    try:
         # Upload DataFrame to a staging table
         df.to_sql('temp_staging', conn, if_exists='replace', index=False)
         # Define columns in df to place in columns in sql db table
         cols = ",".join(df.columns)
-        # Transfer data to the main table with "Replace" logic
+        # Transfer data to the main table using INSERT OR REPLACE for an "upsert" operation
         conn.execute(f"""
             INSERT OR REPLACE INTO {table_name} ({cols})
             SELECT {cols} FROM temp_staging
         """)
         conn.execute("DROP TABLE temp_staging")
         conn.commit()
+    finally:
         conn.close()
+        
 def prev_nav_units():
     conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH))
     query = "SELECT nav, units FROM portfolio_snapshots ORDER BY date DESC LIMIT 1"
@@ -159,6 +168,42 @@ def check_date_exists(date_str: str) -> bool:
         result = None
     conn.close()
     return result is not None
+
+def historical_orders_data():
+    conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH))
+    query = f"SELECT * FROM historical_orders "
+    df = pd.read_sql_query(query, conn)
+    conn.close()
+    return df
+
+def market_val_positions():
+    conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH))
+    query = f"SELECT Symbol, Market, Market_Value, Currency FROM positions WHERE date = '{today_date.strftime('%Y-%m-%d')}'"
+    df = pd.read_sql_query(query, conn)
+    df.rename(columns={'Market_Value': 'Net_P_L'},inplace=True)
+    conn.close()
+    return df
+
+def net_p_l():
+
+    historical_orders_p_l = historical_orders_data()
+
+    # Calculate 'Change'
+    # BUY = Negative (Cost), SELL = Positive(Revenue)
+    historical_orders_p_l['Change'] = historical_orders_p_l.apply(
+        lambda row: (row['Quantity'] * row['Current_Price'] * -1) if 'BUY' in str(row['Buy_Sell']).upper() 
+        else ((row['Quantity'] * row['Current_Price']) if 'SELL' in str(row['Buy_Sell']).upper() else 0.0),
+        axis=1
+    )
+    # Group by columns and sum up those of the same symbol to get net P/L (Excluding those in current positions/hodlings)
+    historical_orders_p_l = historical_orders_p_l.groupby(['Symbol', 'Market', 'Currency'])[['Change']].sum().reset_index().rename(columns={'Change': 'Net_P_L'})
+    # Get current positions market value to get total P/L 
+    positions_mv = market_val_positions()
+    positions_mv = positions_mv[historical_orders_p_l.columns]
+    # Concat, then do the same group by and sum to get true net P/L
+    net_P_L = pd.concat([historical_orders_p_l,positions_mv],ignore_index=True)
+    net_P_L = net_P_L.groupby(['Symbol', 'Market', 'Currency'])[['Net_P_L']].sum().reset_index()
+    return net_P_L
 
 
 def main():
