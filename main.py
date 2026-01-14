@@ -1,4 +1,4 @@
-from source import moomoo_api, cleanup, db
+from source import moomoo_api, cleanup, db, dashboard
 from config import settings
 from datetime import date, datetime,timedelta
 import os
@@ -26,6 +26,7 @@ def upload_to_db(current_date: datetime, end_date: datetime):
     # Initialize variables to None 
     acc_info, positions, cashflow, historical_orders = None, None, None, None
     try:
+        # Record down raw data from api
         trade_ctx = moomoo_api.configure_moomoo_api()
         acc_list = moomoo_api.account_list(trade_ctx)
         acc_info = moomoo_api.account_info(trade_ctx)
@@ -51,10 +52,10 @@ def upload_to_db(current_date: datetime, end_date: datetime):
                 print("OpenD didn't close, forcing kill...")
                 proc_handle.kill()
 
-    print(acc_info)
-    print(positions)
-    print(cashflow)
-    print(historical_orders)
+    print("Acc_info: \n", acc_info)
+    print("Positions: \n", positions)
+    print("Cashflow: \n", cashflow)
+    print("Historical Orders: \n", historical_orders)
 
     ## Cleanup to upload to db
     acc_info = cleanup.cleanup_acc_info(acc_info)
@@ -63,14 +64,18 @@ def upload_to_db(current_date: datetime, end_date: datetime):
     historical_orders = cleanup.cleanup_historical_orders(historical_orders)
     cashflow = cleanup.cleanup_cashflow(cashflow)
 
-    print(acc_info)
+    
+    '''
     print ("Total Assets: ",cleanup.get_total_assets(acc_info))
     print ("Securities assets: ",cleanup.get_securities_assets(acc_info))
     print ("Cash: ",cleanup.get_cash(acc_info))
     print ("Bonds: ",cleanup.get_bonds(acc_info))
-    print(positions)
-    print(historical_orders)
-    print(cashflow)
+    '''
+    print("Acc_info: \n", acc_info)
+    print("Positions: \n", positions)
+    print("Cashflow: \n", cashflow)
+    print("Historical Orders: \n", historical_orders)
+    
     # Calculate shares, options and cash to place into portfolio snapshot
     shares, options = cleanup.separate_assets(positions)
     print(shares)
@@ -110,6 +115,7 @@ def upload_to_db(current_date: datetime, end_date: datetime):
     snapshot_df.loc[0, 'units'] = units
 
     db.insert_dataframe(snapshot_df, 'portfolio_snapshots')
+    db.insert_dataframe(db.net_p_l(),'net_p_l')
 
     return 0
 
@@ -118,25 +124,30 @@ def upload_to_db(current_date: datetime, end_date: datetime):
 def main():
     today_date = datetime.combine(date.today(), datetime.min.time())
     beginning_date = datetime.strptime('2023-08-07', '%Y-%m-%d')
+
+    # --- Database Update Logic ---
     if not os.path.exists(settings.MOOMOO_PORTFOLIO_DB_PATH):
-        upload_to_db(today_date,
-                      beginning_date)
+        print("Database not found. Initializing and fetching all historical data...")
+        upload_to_db(today_date, beginning_date)
         print("Database initialized successfully.")
     else:
-        print("Database already exists. Initialization skipped.")
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        if db.check_date_exists(today_str):
-            print(f"Portfolio snapshot for {today_str} already exists. Skipping run.")
-            return 0
+        today_str = today_date.strftime("%Y-%m-%d")
+        if not db.check_date_exists(today_str):
+            print("Database found, but today's snapshot is missing. Updating...")
+            upload_to_db(today_date, today_date - timedelta(days=30))
+            print("Database updated successfully.")
+        else:
+            print(f"Portfolio snapshot for {today_str} is already up-to-date. Skipping data update.")
 
-        upload_to_db(today_date,
-                     today_date - timedelta(days=30))
-        print("Database updated successfully.")
-
+    # --- Dashboard Plotting Logic ---
+    print("\nLoading dashboard...")
+    dashboard.setup()
+    df = dashboard.asset_allocation_data(today_date)
+    if df.empty:
+        print(f"No data found for {today_date.strftime('%Y-%m-%d')}. Cannot generate plot.")
+    else:
+        dashboard.plot_asset_allocation(df)
     return 0
-
-
-    
 
 if __name__ == "__main__":
     main()

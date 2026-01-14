@@ -16,6 +16,9 @@ dotenv = "*"
 psutil = "*"
 pathlib = "*"
 sqlalchemy = "*"
+plotly = "*"
+streamlit = "*"
+mplcyberpunk = "*"
 
 [dev-packages]
 pytest = "*"
