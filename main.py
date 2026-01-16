@@ -1,8 +1,10 @@
 from source import moomoo_api, cleanup, db, dashboard
 from config import settings
 from datetime import date, datetime,timedelta
+import matplotlib.pyplot as plt
 import os
 import subprocess
+import pandas as pd
 
 '''
 TESTING PURPOSES ONLY
@@ -16,75 +18,61 @@ current_date = [
                 ]
                 
 '''
-
-def upload_to_db(current_date: datetime, end_date: datetime):
-
+def get_api_data(current_date: datetime, end_date: datetime, keep_opend_alive: bool = False):
     ## Handle API
-    # Check if running .exe and create process
-    proc_handle, was_already_running = moomoo_api.manage_opend()
-    trade_ctx = None
     # Initialize variables to None 
     acc_info, positions, cashflow, historical_orders = None, None, None, None
     try:
-        # Record down raw data from api
-        trade_ctx = moomoo_api.configure_moomoo_api()
-        acc_list = moomoo_api.account_list(trade_ctx)
-        acc_info = moomoo_api.account_info(trade_ctx)
-        positions = moomoo_api.get_positions(trade_ctx)
-        cashflow = moomoo_api.account_cashflow(trade_ctx, current_date, end_date)
-        historical_orders = moomoo_api.get_historical_orders(trade_ctx)
-
+        with moomoo_api.opend_session(keep_alive=keep_opend_alive) as trade_ctx:
+            # Record down raw data from api
+            acc_info = moomoo_api.account_info(trade_ctx)
+            positions = moomoo_api.get_positions(trade_ctx)
+            cashflow = moomoo_api.account_cashflow(trade_ctx, current_date, end_date)
+            historical_orders = moomoo_api.get_historical_orders(trade_ctx)
     except Exception as e:
         print(f"API Error: {e}")
-    finally:
-        if trade_ctx:
-            trade_ctx.close()
-        # KILL THE PROCESS
-        # If we started it, OR if you want it dead regardless:
-        if proc_handle:
-            print("Shutting down OpenD...")
-            proc_handle.terminate() # Gentle request to close
-            
-            # Wait 2 seconds, if still alive, kill it forcefully
-            try:
-                proc_handle.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                print("OpenD didn't close, forcing kill...")
-                proc_handle.kill()
-
+    
     print("Acc_info: \n", acc_info)
     print("Positions: \n", positions)
     print("Cashflow: \n", cashflow)
     print("Historical Orders: \n", historical_orders)
 
+    return acc_info, positions, cashflow, historical_orders
+
+def cleanup_data(acc_info: pd.DataFrame, positions: pd.DataFrame, cashflow: pd.DataFrame, historical_orders: pd.DataFrame,current_date: datetime):
     ## Cleanup to upload to db
+    print("Cleaning up data...")
     acc_info = cleanup.cleanup_acc_info(acc_info)
     positions = cleanup.cleanup_positions(positions)
     cleanup.update_portfolio_percentage(positions, cleanup.get_total_assets(acc_info))
     historical_orders = cleanup.cleanup_historical_orders(historical_orders)
     cashflow = cleanup.cleanup_cashflow(cashflow)
 
-    
+    print("Acc_info: \n", acc_info)
+    print("Positions: \n", positions)
+    print("Cashflow: \n", cashflow)
+    print("Historical Orders: \n", historical_orders)
     '''
     print ("Total Assets: ",cleanup.get_total_assets(acc_info))
     print ("Securities assets: ",cleanup.get_securities_assets(acc_info))
     print ("Cash: ",cleanup.get_cash(acc_info))
     print ("Bonds: ",cleanup.get_bonds(acc_info))
     '''
-    print("Acc_info: \n", acc_info)
-    print("Positions: \n", positions)
-    print("Cashflow: \n", cashflow)
-    print("Historical Orders: \n", historical_orders)
+
     
-    # Calculate shares, options and cash to place into portfolio snapshot
+    # Split shares and options positions into separate dataframes
     shares, options = cleanup.separate_assets(positions)
-    print(shares)
-    print(options)
+    print("Shares Dataframe: \n", shares)
+    print("Options Dataframe: \n", options)
+    # Calculate Market Value of Shares and Options
     shares_mv = cleanup.sum_of_mv(shares)
     options_mv = cleanup.sum_of_mv(options)
     print("Shares Market Value (SGD): ", shares_mv)
     print("Options Market Value (SGD): ", options_mv)
+    # Calculate Cash position
     cash = cleanup.get_cash(acc_info)
+    print("Cash (SGD): ", cash)
+    # Set up snapshot dataframe
     date_str = current_date.strftime("%Y-%m-%d")
     # Set up snapshot_df and positions_df to place into db
     snapshot_df = cleanup.portfolio_snapshot_table(
@@ -94,12 +82,15 @@ def upload_to_db(current_date: datetime, end_date: datetime):
         options_mv,
         cash
     )
+    # Set up positions dataframe
     positions_df = cleanup.positions_table(positions, date_str)
+    
+    print("snapshot dataframe: \n", snapshot_df)
+    print("positions dataframe: \n", positions_df)
 
-    print("Cash (SGD): ", cash)
-    print(snapshot_df)
-    print(positions_df)
+    return snapshot_df, positions_df, cashflow, historical_orders
 
+def update_db(snapshot_df: pd.DataFrame, positions_df: pd.DataFrame, cashflow: pd.DataFrame, historical_orders: pd.DataFrame,current_date: datetime):
     ## Initialise and upload dataframes to db
     db.init_db()
     db.insert_dataframe(positions_df, 'positions')
@@ -115,10 +106,16 @@ def upload_to_db(current_date: datetime, end_date: datetime):
     snapshot_df.loc[0, 'units'] = units
 
     db.insert_dataframe(snapshot_df, 'portfolio_snapshots')
-    db.insert_dataframe(db.net_p_l(),'net_p_l')
-
+    db.insert_dataframe(db.net_p_l(current_date),'net_p_l')
     return 0
 
+
+def upload_to_db(current_date: datetime, end_date: datetime, keep_opend_alive: bool = False):
+    acc_info, positions, cashflow, historical_orders = get_api_data(current_date, end_date, keep_opend_alive)
+    snapshot_df, positions_df, cashflow, historical_orders = cleanup_data(acc_info, positions, cashflow, historical_orders,current_date)
+    update_db(snapshot_df, positions_df, cashflow, historical_orders, current_date)
+    print("Database updated successfully.")
+    return 0
 
 
 def main():
@@ -128,25 +125,16 @@ def main():
     # --- Database Update Logic ---
     if not os.path.exists(settings.MOOMOO_PORTFOLIO_DB_PATH):
         print("Database not found. Initializing and fetching all historical data...")
-        upload_to_db(today_date, beginning_date)
+        upload_to_db(today_date, beginning_date,keep_opend_alive=False)
         print("Database initialized successfully.")
     else:
         today_str = today_date.strftime("%Y-%m-%d")
         if not db.check_date_exists(today_str):
             print("Database found, but today's snapshot is missing. Updating...")
-            upload_to_db(today_date, today_date - timedelta(days=30))
+            upload_to_db(today_date, today_date - timedelta(days=30),keep_opend_alive=False)
             print("Database updated successfully.")
         else:
             print(f"Portfolio snapshot for {today_str} is already up-to-date. Skipping data update.")
-
-    # --- Dashboard Plotting Logic ---
-    print("\nLoading dashboard...")
-    dashboard.setup()
-    df = dashboard.asset_allocation_data(today_date)
-    if df.empty:
-        print(f"No data found for {today_date.strftime('%Y-%m-%d')}. Cannot generate plot.")
-    else:
-        dashboard.plot_asset_allocation(df)
     return 0
 
 if __name__ == "__main__":
