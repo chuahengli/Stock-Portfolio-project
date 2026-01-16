@@ -4,6 +4,8 @@ from config import settings
 import sqlite3
 import pandas as pd
 from datetime import datetime
+import re
+import numpy as np
 
 
 def init_db():
@@ -169,37 +171,60 @@ def check_date_exists(date_str: str) -> bool:
     conn.close()
     return result is not None
 
+# Get historical orders dataframe
 def historical_orders_data():
     conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH))
     query = f"SELECT * FROM historical_orders "
     df = pd.read_sql_query(query, conn)
     conn.close()
     return df
+# Calculate P/L for historical orders dataframe
+def calculate_change(row):
+        option_pattern = r'[A-Z]+\d{6}[CP]\d+'
+        # Determine multiplier: 100 for options, 1 for stocks
+        is_option = re.search(option_pattern, str(row['Symbol']))
+        multiplier = 100 if is_option else 1
+        amount = row['Quantity'] * row['Current_Price'] * multiplier
+        
+        side = str(row['Buy_Sell']).upper()
+        if 'BUY' in side:
+            return amount * -1
+        elif 'SELL' in side:
+            return amount
+        return 0.0
 
-def market_val_positions():
+# Get relevant information from positions table as dataframe to calculate P/L
+def unrealised_p_l(today_date: datetime):
     conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH))
-    query = f"SELECT Symbol, Market, Market_Value, Currency FROM positions WHERE date = '{today_date.strftime('%Y-%m-%d')}'"
+    query = f"SELECT Symbol, Market, Market_Value, P_L, Currency FROM positions WHERE date = '{today_date.strftime('%Y-%m-%d')}'"
     df = pd.read_sql_query(query, conn)
-    df.rename(columns={'Market_Value': 'Net_P_L'},inplace=True)
     conn.close()
     return df
 
-def net_p_l():
 
+def net_p_l(today_date: datetime):
+    # Regex to identify options (Standard: Root + 6 digits + C/P + 8 digits)
+    option_pattern = r'[A-Z]+\d{6}[CP]\d+'
     historical_orders_p_l = historical_orders_data()
 
     # Calculate 'Change'
     # BUY = Negative (Cost), SELL = Positive(Revenue)
-    historical_orders_p_l['Change'] = historical_orders_p_l.apply(
-        lambda row: (row['Quantity'] * row['Current_Price'] * -1) if 'BUY' in str(row['Buy_Sell']).upper() 
-        else ((row['Quantity'] * row['Current_Price']) if 'SELL' in str(row['Buy_Sell']).upper() else 0.0),
-        axis=1
-    )
+    historical_orders_p_l['Change'] = historical_orders_p_l.apply(calculate_change, axis=1)
+
     # Group by columns and sum up those of the same symbol to get net P/L (Excluding those in current positions/hodlings)
     historical_orders_p_l = historical_orders_p_l.groupby(['Symbol', 'Market', 'Currency'])[['Change']].sum().reset_index().rename(columns={'Change': 'Net_P_L'})
-    # Get current positions market value to get total P/L 
-    positions_mv = market_val_positions()
-    positions_mv = positions_mv[historical_orders_p_l.columns]
+    
+    # Get current positions market value and unrealised P/L to calculate net P/L
+    positions_mv = unrealised_p_l(today_date)
+    # Define condition if is option, if option use P_L, otherwise use Market_Vaue 
+    condition = positions_mv['Symbol'].astype(str).str.contains(option_pattern, regex=True)
+    positions_mv['Net_P_L'] = np.where(
+        condition, 
+        positions_mv['P_L'],          # Use value from 'P_L' column
+        positions_mv['Market_Value']  # Use value from 'Market_Value' column
+    )
+    
+    positions_mv.drop(['Market_Value','P_L'], axis=1, inplace=True) 
     # Concat, then do the same group by and sum to get true net P/L
     net_P_L = pd.concat([historical_orders_p_l,positions_mv],ignore_index=True)
     net_P_L = net_P_L.groupby(['Symbol', 'Market', 'Currency'])[['Net_P_L']].sum().reset_index()

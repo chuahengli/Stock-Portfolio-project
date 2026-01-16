@@ -6,7 +6,6 @@ name = "pypi"
 [packages]
 requests = "*"
 pandas = "*"
-numpy = "*"
 yfinance = "*"
 matplotlib = "*"
 seaborn = "*"
@@ -19,6 +18,7 @@ sqlalchemy = "*"
 plotly = "*"
 streamlit = "*"
 mplcyberpunk = "*"
+numpy = "*"
 
 [dev-packages]
 pytest = "*"

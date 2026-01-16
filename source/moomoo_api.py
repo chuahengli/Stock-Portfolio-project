@@ -10,6 +10,7 @@ from datetime import datetime,date,timedelta
 import pandas as pd
 from typing import Optional, Dict, List
 import psutil
+from contextlib import contextmanager
 
 def manage_opend():
     opend_path = str(settings.OPEND_PATH)
@@ -36,7 +37,6 @@ def start_opend_headless(opend_path: str):
             process = subprocess.Popen([opend_path])
         print(f"OpenD started with PID: {process.pid}")
         print("Connecting to OpenD via API...")
-        time.sleep(5)  # Wait for OpenD to initialize
         return process
     except FileNotFoundError:
         print(f"Error: OpenD executable not found at {opend_path}")
@@ -45,7 +45,7 @@ def start_opend_headless(opend_path: str):
 
 def configure_moomoo_api():
     # Get the RSA key path from environment variables
-    load_dotenv()
+    load_dotenv(settings.BASE_DIR / ".env")
     key_path = os.getenv("KEY_PATH")
     # 1. Configure the RSA private key file globally
     moomoo.SysConfig.set_init_rsa_file(key_path)
@@ -123,11 +123,47 @@ def account_cashflow(trade_obj: OpenSecTradeContext, current_date: datetime, end
 def get_historical_orders(trade_obj: OpenSecTradeContext):
     ret, data = trade_obj.history_order_list_query(start="2023-08-07 00:00:00",end=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
     if ret == moomoo.RET_OK:
-        return data
+        return data 
     else:
         raise Exception('history_order_list_query error: ', data)
     
+# Manually shut down OpenD.exe
+def stop_opend():
+    """Finds and stops any running OpenD processes."""
+    for proc in psutil.process_iter(['name', 'pid']):
+        if proc.info['name'] == 'OpenD.exe':
+            print(f"Stopping OpenD (PID: {proc.info['pid']})...")
+            try:
+                proc.terminate()
+                proc.wait(timeout=2)
+            except psutil.TimeoutExpired:
+                proc.kill()
+            except psutil.NoSuchProcess:
+                pass
 
+# Manage context, and whether keep openD alive or kill it
+@contextmanager
+def opend_session(keep_alive: bool = False):
+    """Context manager to handle OpenD lifecycle."""
+    proc_handle, was_already_running = manage_opend()
+    trade_ctx = None
+    try:
+        trade_ctx = configure_moomoo_api()
+        yield trade_ctx
+    finally:
+        if trade_ctx:
+            trade_ctx.close()
+        
+        if proc_handle and not was_already_running and not keep_alive:
+            print("Shutting down OpenD...")
+            proc_handle.terminate()
+            try:
+                proc_handle.wait(timeout=2)
+            except (subprocess.TimeoutExpired, psutil.TimeoutExpired):
+                print("OpenD didn't close, forcing kill...")
+                proc_handle.kill()
+        else:
+            print("Keeping OpenD running for faster future updates...")
 
 def main():
     return 0

@@ -66,6 +66,7 @@ def cleanup_positions(positions:pd.DataFrame):
                             'pl_val':'P_L',
                             'today_pl_val':"Today_s_P_L",
                             'currency':'Currency'}, inplace=True)
+    # Renamed Symbol to exclude XX.AMZN...f
     positions['Symbol'] = positions['Symbol'].apply(extract_ticker)
     return positions
 
@@ -127,6 +128,8 @@ def cleanup_historical_orders(historical_orders:pd.DataFrame):
     return historical_orders
 
 def cleanup_cashflow(cashflow:pd.DataFrame):
+    if cashflow.empty:
+        return pd.DataFrame()
     cashflow_filter = ['cashflow_id','clearing_date','currency','cashflow_type','cashflow_direction','cashflow_amount','cashflow_remark']
     cashflow = cashflow.loc[:, cashflow_filter]
     cashflow.rename(columns={'clearing_date':'Date',
