@@ -18,21 +18,23 @@ def setup():
 
 def asset_allocation_data(current_date:datetime):
     date_str = current_date.strftime('%Y-%m-%d')
-    conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH))
     query = f"SELECT stocks,options,cash FROM portfolio_snapshots WHERE date = '{date_str}'"
-
-    df = pd.read_sql_query(query, conn)
-    print(df)
+    df = db.read_db(query)
     return df
 
 def plot_asset_allocation(df: pd.DataFrame):
+    if df.empty:
+        # Return an empty figure or a message
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No Data Available", ha='center')
+        return fig
     df = df.rename(columns={'stocks': 'Stocks', 'options': 'Options', 'cash': 'Cash'})
     categories = df.columns.to_list()
     total_assets = df.iloc[0].sum()
     values = df.iloc[0].values
     percentages = (values / total_assets) * 100
     
-    colour_list = ['skyblue', 'coral', 'gainsboro']
+    colour_list = ['skyblue', 'coral', 'gray']
 
     fig, ax = plt.subplots(layout='constrained',figsize=(9, 3))
     bars = ax.barh(y=categories,
@@ -46,17 +48,15 @@ def plot_asset_allocation(df: pd.DataFrame):
     ax.spines[['top', 'right', 'bottom','left']].set_visible(False) # Remove box borders
     ax.xaxis.set_visible(False) # Hide x-axis numbers since we have labels on the bars
     ax.tick_params(axis='y', labelsize=14, length=0)
-    plt.title(f"Asset Allocation\n${total_assets:,.2f}",
+    plt.title(f"Asset Allocation\n${total_assets:,.2f} (SGD)",
                 fontsize=20,
                 pad=20)
     return fig
 
 def market_p_l_type(market: str):
-    conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH))
-    cursor = conn.cursor()
     query = f"SELECT * FROM net_p_l"
-    net_P_L = pd.read_sql_query(query, conn)
-    conn.close()
+    net_P_L = db.read_db(query)
+    
     # Split by market 'US','SG','HK' etc.
     net_P_L = net_P_L[net_P_L['Market']==market].round(2)
     # If option
@@ -88,16 +88,17 @@ def get_base_ticker(symbol: str, is_opt):
     return symbol 
 
 def asset_trend_data():
-        
-    conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH))
-    cursor = conn.cursor()
     query = f"SELECT date, total_assets FROM portfolio_snapshots"
-    df = pd.read_sql_query(query, conn)
-    conn.close()
+    df = db.read_db(query)
     return df
 
 
 def plot_asset_trend(data: pd.DataFrame):
+    if data.empty:
+        # Return an empty figure or a message
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No Data Available", ha='center')
+        return fig
     data['date'] = pd.to_datetime(data['date'])
     data.sort_values('date', inplace=True)
 
@@ -120,15 +121,27 @@ def plot_asset_trend(data: pd.DataFrame):
             pad=20)
     return fig
 
-def twr_data():
-    conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH))
-    cursor = conn.cursor()
-    query = f"SELECT date, nav FROM portfolio_snapshots"
-    df = pd.read_sql_query(query, conn)
-    conn.close()
-    return df
+
+def get_twr(df: pd.DataFrame, start_date: datetime, end_date: datetime):
+    start_str: str = start_date.strftime('%Y-%m-%d')
+    end_str: str = end_date.strftime('%Y-%m-%d')
+
+    try:
+        beginning_nav = df.loc[df['date']==start_str,'nav'].values[0]
+        end_nav = df.loc[df['date']==end_str,'nav'].values[0]
+    except IndexError:
+        return "N/A"
+
+    returns = (end_nav-beginning_nav)/beginning_nav 
+    twr = f"{returns:.2%}"
+    return twr
 
 def plot_twr(data: pd.DataFrame):
+    if data.empty:
+        # Return an empty figure or a message
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No Data Available", ha='center')
+        return fig
     data['date'] = pd.to_datetime(data['date'])
     data.sort_values('date', inplace=True)
 
