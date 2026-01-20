@@ -77,7 +77,6 @@ def cleanup_data(acc_info: pd.DataFrame, positions: pd.DataFrame, cashflow: pd.D
     # Set up snapshot_df and positions_df to place into db
     snapshot_df = cleanup.portfolio_snapshot_table(
         date_str,
-        cleanup.get_total_assets(acc_info),
         shares_mv,
         options_mv,
         cash
@@ -112,6 +111,9 @@ def update_db(snapshot_df: pd.DataFrame, positions_df: pd.DataFrame, cashflow: p
 
 def upload_to_db(current_date: datetime, end_date: datetime, keep_opend_alive: bool = False):
     acc_info, positions, cashflow, historical_orders = get_api_data(current_date, end_date, keep_opend_alive)
+    if acc_info is None or positions is None:
+        print("API returned no data. Skipping database update for this tick.")
+        return 1
     snapshot_df, positions_df, cashflow, historical_orders = cleanup_data(acc_info, positions, cashflow, historical_orders,current_date)
     update_db(snapshot_df, positions_df, cashflow, historical_orders, current_date)
     print("Database updated successfully.")

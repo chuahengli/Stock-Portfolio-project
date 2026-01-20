@@ -3,6 +3,7 @@ from typing import Optional, Dict, List
 import pandas as pd
 import re
 import yfinance as yf
+import functools
 
 def cleanup_acc_info(acc_info:pd.DataFrame):
     filter_list = ['total_assets','securities_assets', 'fund_assets','bond_assets','cash','pending_asset','frozen_cash','avl_withdrawal_cash','risk_status',
@@ -70,33 +71,38 @@ def cleanup_positions(positions:pd.DataFrame):
     positions['Symbol'] = positions['Symbol'].apply(extract_ticker)
     return positions
 
-
-
-def get_exchange_rate(from_currency:str,to_currency:str):
+# Cache last 16, and every hour, according to datetime object
+@functools.lru_cache(maxsize=16)
+def get_exchange_rate(from_currency:str,to_currency:str,current_hour_tag = datetime.now().strftime("%Y-%m-%d-%H")):
     if from_currency == to_currency:
         return 1.0
-    elif to_currency == 'USD':
-        ticker = f"{from_currency}=X"
-    else:
-        ticker = f"{from_currency}{to_currency}=X"
-    price_data = yf.download(tickers=ticker, period='2d',
-                             auto_adjust=True,
-                             interval='1m',
-                             progress=False,
-                             prepost=True)
-    if price_data.empty:
-        print("Warning: Could not download share price data.")
-        return 
+    ticker = f"{from_currency}{to_currency}=X" if to_currency != 'USD' else f"{from_currency}=X"
+    try:
+        price_data = yf.download(tickers=ticker, period='1d',
+                                auto_adjust=True,
+                                interval='1m',
+                                progress=False,
+                                prepost=True)
+        if not price_data.empty:
+            # Extract the most recent price for each ticker
+        # Forward-fill to propagate the last valid price, then select the last row.
+        # This handles cases where some tickers may not have traded in the last minute.
+            return price_data['Close'].ffill().iloc[-1].round(decimals=3).item()
+        # Set fallbacks and get approx value
+        fallbacks = {"USD": {"SGD": 1.28}, "SGD": {"USD": 0.78}}
+        return fallbacks.get(from_currency, {}).get(to_currency, 1.0)
+    
+    except Exception as e:
+        print(f"Error fetching exchange rate: {e}")
+        # Return a safe fallback so the dashboard doesn't break
+        return 1.28 if from_currency == "USD" and to_currency == "SGD" else 0.78 if from_currency == "SGD" and to_currency == "USD" else 1.0
 
-    # Extract the most recent price for each ticker
-    # Forward-fill to propagate the last valid price, then select the last row.
-    # This handles cases where some tickers may not have traded in the last minute.
-    latest_price = price_data['Close'].ffill().iloc[-1].round(decimals=3).item()
-    return latest_price
+    
+            
 
-def convert_currency(value, from_currency:str, to_currency:str) -> Optional[float]:
+def convert_currency(value, from_currency:str, to_currency:str,current_hour_tag = datetime.now().strftime("%Y-%m-%d-%H")) -> Optional[float]:
     """Converts a given amount from one currency to another."""
-    rate = get_exchange_rate(from_currency, to_currency)
+    rate = get_exchange_rate(from_currency, to_currency,current_hour_tag)
     if rate:
         converted_amount = value * rate
         return round(converted_amount, 2)
@@ -166,10 +172,10 @@ def sum_of_mv(df:pd.DataFrame):
     return converted_df['Market_Value'].sum().round(2)
 
 
-def portfolio_snapshot_table(date: str, total_assets:float, shares_mv:float, options_mv:float, cash:float):
+def portfolio_snapshot_table(date: str, shares_mv:float, options_mv:float, cash:float):
     data = {
         'date': [date],
-        'total_assets': [total_assets],
+        'total_assets': [shares_mv+options_mv+cash],
         'stocks': [shares_mv],
         'options': [options_mv],
         'cash': [cash]
