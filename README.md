@@ -1,4 +1,4 @@
-#📈Moomoo Portfolio Tracker & Analyzer
+# 📈Moomoo Portfolio Tracker & Analyzer
 
 A tool that interfaces with the **Moomoo OpenD gateway** to store portfolio data into SQLite database and display a dashboard using **Streamlit**. This project is designed to automatically track daily portfolio value, positions, cash flow, and historical orders to track Time-Weighted Returns.
 <img width="1267" height="701" alt="image" src="https://github.com/user-attachments/assets/19b0c55f-c68b-412c-8e07-155af9e9be7c" />
@@ -76,7 +76,7 @@ For security, this project uses RSA encryption.
 2. Set `KEY_PATH` to the absolute file path of your RSA key .txt file by replacing `YOUR_RSA_KEY_PATH_HERE.txt`
 
 ### 5. Account Cashflow History:
-Open your .env file and set START_DATE to the date you opened your Moomoo account (YYYY-MM-DD) as a string. This is to get all historical account cashflow data.
+Open your `.env` file and set `START_DATE` to the date you opened your Moomoo account (YYYY-MM-DD) as a string. This is to get all historical account cashflow data.
 
 
 
