@@ -75,8 +75,12 @@ For security, this project uses RSA encryption.
 1. Rename .env.example from this repo to .env
 2. Set `KEY_PATH` to the absolute file path of your RSA key .txt file by replacing `YOUR_RSA_KEY_PATH_HERE.txt`
 
+### 5. Account Cashflow History:
+Open your .env file and set START_DATE to the date you opened your Moomoo account (YYYY-MM-DD) as a string. This is to get all historical account cashflow data.
 
-### 5. Install Dependencies
+
+
+### 6. Install Dependencies
 This project uses `pipenv` for dependency management. Run this line
 ```bash
 pip install pipenv
@@ -102,7 +106,7 @@ pipenv install
 └── README.md             
 ```
 ## 📊 Usage
-1. Initialize/Update Database: Run the main script to fetch historical data and today's snapshot.
+1. Initialize/Update Database: Run the main script to fetch historical data and today's snapshot. Depending on how old the account is, obtaining account cashflow historically may take a while. Otherwise, after initialization, it should only take a few seconds.
 ```bash
 pipenv run python main.py
 ```

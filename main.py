@@ -122,7 +122,7 @@ def upload_to_db(current_date: datetime, end_date: datetime, keep_opend_alive: b
 
 def main():
     today_date = datetime.combine(date.today(), datetime.min.time())
-    beginning_date = datetime.strptime('2023-08-07', '%Y-%m-%d')
+    beginning_date = settings.START_DATE
 
     # --- Database Update Logic ---
     if not os.path.exists(settings.MOOMOO_PORTFOLIO_DB_PATH):
