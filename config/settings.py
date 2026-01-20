@@ -1,5 +1,12 @@
 import os
 from pathlib import Path
+import dotenv
+from datetime import datetime
+
+# Load environment variables from .env file
+dotenv.load_dotenv()
+
+START_DATE = datetime.strptime(os.getenv("START_DATE", "2024-01-01"), "%Y-%m-%d")
 
 # root directory of the project
 BASE_DIR = Path(__file__).resolve().parent.parent
