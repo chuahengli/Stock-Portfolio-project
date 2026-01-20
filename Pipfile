@@ -4,20 +4,16 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-requests = "*"
 pandas = "*"
 yfinance = "*"
 matplotlib = "*"
-seaborn = "*"
 moomoo-api = "*"
 load-dotenv = "*"
 dotenv = "*"
 psutil = "*"
 pathlib = "*"
-sqlalchemy = "*"
 plotly = "*"
 streamlit = "*"
-mplcyberpunk = "*"
 numpy = "*"
 
 [dev-packages]
