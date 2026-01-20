@@ -5,6 +5,7 @@ from datetime import datetime, date, timedelta
 import matplotlib.pyplot as plt
 import mplcyberpunk
 import atexit
+import plotly.express as px
 
 # Import existing project modules
 from source import dashboard, db, moomoo_api
@@ -50,10 +51,7 @@ def get_latest_db_date():
     if not df.empty:
         return datetime.strptime(df.iloc[0]['date'], '%Y-%m-%d')
     return None
-# Style Pandas dataframe
-def style_negative_red_positive_green(val):
-            color = '#A52A2A' if val < 0 else '#4CAF50'
-            return f'color: {color}'
+
 
 @st.cache_data(scope = 'session')
 def get_past_data(today_str: str):
@@ -83,12 +81,12 @@ def live_update_db():
     try:
         today_date = datetime.combine(date.today(), datetime.min.time())
         main.upload_to_db(today_date, today_date, keep_opend_alive=True)
-        print("Database updated successfully.")
     except Exception as e:
         print(f"Error updating database: {e}")
 
 @st.fragment(run_every=refresh_rate if live_mode else None)
 def render_live():
+    current_time = datetime.now().strftime('%b %d, %Y %H:%M:%S')
     latest_date = get_latest_db_date()
     
     if not latest_date:
@@ -97,6 +95,8 @@ def render_live():
     
     previous_date = latest_date - timedelta(days=1)
     portfolio_snapshots_df = get_combined_data()
+    pos_df = db.read_db(f"SELECT * FROM positions WHERE date = '{latest_date.strftime('%Y-%m-%d')}'")
+    pos_df=dashboard.display_pos(pos_df)
 
     # --- Top Metrics Row ---
     snapshot_df = portfolio_snapshots_df.loc[portfolio_snapshots_df['date'] == latest_date.strftime('%Y-%m-%d')]
@@ -137,34 +137,33 @@ def render_live():
         col3.metric("Options", f"${col3_metric:,.2f}", delta=col3_delta)
         col4.metric("Cash Balance", f"${col4_metric:,.2f}", delta=col4_delta)
         #col5.metric("NAV", f"{col5_metric:.4f}",delta=col5_delta)
-        col6.metric("Last Updated", datetime.strptime(curr['date'],"%Y-%m-%d").strftime("%b %d, %Y"))
+        col6.metric("Last Updated", current_time)
     # --- Tabs for different views ---
-    tab1, tab2, tab3 = st.tabs(["📊 Overview", "📋 Positions", "💰 P/L Analysis"])
+    overview, positions, p_l_analysis = st.tabs(["📊 Overview", "📋 Positions", "💰 P/L Analysis"])
 
-    with tab1:
+    with overview:
         # col_left, col_right = st.columns(2)
         
         
         #st.subheader("Asset Allocation",text_alignment = 'center')
-        _, col1, _ = st.columns([0.2,0.6,0.2])
         # Get allocation data for the specific date
         returns_str = dashboard.get_twr(portfolio_snapshots_df, datetime.strptime('2026-01-12', '%Y-%m-%d'), latest_date)
         
         alloc_df = snapshot_df.loc[:,['stocks','options','cash']]
-        with col1:
-            
-            if not alloc_df.empty:
-                fig_alloc = dashboard.plot_asset_allocation(alloc_df)
-                st.pyplot(fig_alloc)
-            else:
-                st.warning("No allocation data for this date.")
+        total_assets = alloc_df.sum(axis=1).values[0]
+        
 
         col2, col3 = st.columns(2)
         with col2:
-            #st.subheader("Asset Trend")
-            trend_df = portfolio_snapshots_df.loc[:,['date','total_assets']]
-            fig_trend = dashboard.plot_asset_trend(trend_df)
-            st.pyplot(fig_trend)
+            st.markdown(
+                    f"<span style='font-size:24px;'>Total Assets(SGD): ${total_assets:,.2f}</span>",
+                    unsafe_allow_html=True
+                )
+            fig_trend = dashboard.plot_asset_trend(portfolio_snapshots_df, 
+                                                   datetime.strptime('2026-01-12', '%Y-%m-%d'), 
+                                                   latest_date,
+                                                   'total_assets','Total Assets')
+            st.plotly_chart(fig_trend)
         with col3:
             #st.subheader("Time Weighted Returns")
             #st.text("Time Weighted Returns (TWR)")
@@ -188,42 +187,35 @@ def render_live():
                     unsafe_allow_html=True
                 )
 
-            twr_df = portfolio_snapshots_df.loc[:,['date','nav']]
-            fig_twr = dashboard.plot_twr(twr_df)
-            st.pyplot(fig_twr)
+            fig_twr = dashboard.plot_asset_trend(portfolio_snapshots_df, 
+                                                   datetime.strptime('2026-01-12', '%Y-%m-%d'), 
+                                                   latest_date,
+                                                   'Percent_Change','twr')
+            st.plotly_chart(fig_twr)
+        
+        asset_alloc_col, sector_alloc_col = st.columns([0.5,0.5])
+        
+        with asset_alloc_col:
+            if not alloc_df.empty:
+                fig_alloc = dashboard.plot_asset_allocation(alloc_df)
+                st.plotly_chart(fig_alloc)
+            else:
+                st.warning("No allocation data for this date.")
 
-        # _, col3, _ = st.columns([0.2,0.6,0.2])
+        with sector_alloc_col:
+            st.plotly_chart(dashboard.plot_sector_allocation(pos_df))
+
     
     
 
-    with tab2:
+    with positions:
         st.subheader(f"Positions as of {latest_date.strftime('%b %d, %Y')}")
-        
-        pos_df = db.read_db(f"SELECT * FROM positions WHERE date = '{latest_date.strftime('%Y-%m-%d')}'")
-        
-        # Add column is option or not
-        option_pattern = r'[A-Z]+\d{6}[CP]\d+'
-        pos_df['Is_Option'] = pos_df['Symbol'].str.contains(option_pattern, regex=True)
-        # Identify what Ticker, and if is option or stock
-        pos_df['Ticker'] = pos_df.apply(lambda x: dashboard.get_base_ticker(x['Symbol'], x['Is_Option']), axis=1)
-        pos_df['Asset_Type'] = pos_df['Is_Option'].map({True: 'Option', False: 'Stock'})
+        pos_df_styled = dashboard.style_pos(pos_df)
 
-        # Grouping and Sorting: Calculate total portfolio % per ticker to sort groups by size
-        # Convert 'Portfolio_Percent' (e.g., "12.5%") to float for calculation
-        pos_df['Sort_Val'] = pos_df['Portfolio_Percent'].astype(str).str.rstrip('%').astype(float)
-        # Create new dataframe with Ticker total value for each ticker sum it
-        ticker_totals = pos_df.groupby('Ticker')['Sort_Val'].sum().reset_index(name='Ticker_Total_Val')
-        # Merge onto Ticker column to match respective ticker, total ticker percentage on resepective ticker regardless option or stock
-        pos_df = pos_df.merge(ticker_totals, on='Ticker')
-        # Sort by Ticker Total (desc), then by individual position value (desc)
-        pos_df = pos_df.sort_values(by=['Ticker_Total_Val', 'Sort_Val'], ascending=[False, False])
         
-        # Reorder columns to show Ticker and Asset Type first
-        cols_order = ['Ticker', 'Symbol', 'Asset_Type'] + [c for c in pos_df.columns if c not in ['Ticker', 'Symbol', 'Asset_Type', 'Is_Option', 'Sort_Val', 'Ticker_Total_Val']]
-        pos_df = pos_df[cols_order]
-        # Make P/L Green and Red if positive or negative
-        pos_df = pos_df.style.map(style_negative_red_positive_green, subset=['P_L_Percent','P_L', 'Today_s_P_L'])
-        st.dataframe(pos_df, hide_index=True,
+        
+        # Display positions dataframe
+        st.dataframe(pos_df_styled, hide_index=True,
                      column_config={'date': None,
                                     'Quantity': st.column_config.NumberColumn('Quantity',
                                                                                   format="localized"),
@@ -244,15 +236,22 @@ def render_live():
                                                                                   format="percent")
                                     } 
                     )
+        
+        
+        st.plotly_chart(dashboard.plot_pos(pos_df))
+        
 
-    with tab3:
+
+
+
+    with p_l_analysis:
         st.subheader("Net P/L by Market")
         col_us, col_sg = st.columns(2)
         with col_us:
             st.write("**🇺🇸 US Market**")
             us_p_l = dashboard.market_p_l_type('US').sort_values(by='Total_Net_P_L', ascending=False)
             subset_cols = [col for col in ['Stock', 'Option', 'Total_Net_P_L'] if col in us_p_l.columns]
-            us_p_l = us_p_l.style.map(style_negative_red_positive_green, subset=subset_cols)
+            us_p_l = us_p_l.style.map(dashboard.style_negative_red_positive_green, subset=subset_cols)
             st.dataframe(us_p_l.format("{:+,.2f}", subset=subset_cols),
                         column_config={
                                         'Stock': st.column_config.NumberColumn('Stock'),
@@ -265,7 +264,7 @@ def render_live():
             st.write("**🇸🇬 SG Market**")
             sg_p_l = dashboard.market_p_l_type('SG').sort_values(by='Total_Net_P_L', ascending=False)
             subset_cols = [col for col in ['Stock', 'Option', 'Total_Net_P_L'] if col in sg_p_l.columns]
-            sg_p_l = sg_p_l.style.map(style_negative_red_positive_green, subset=subset_cols)
+            sg_p_l = sg_p_l.style.map(dashboard.style_negative_red_positive_green, subset=subset_cols)
             st.dataframe(sg_p_l.format("{:+,.2f}", subset=subset_cols),
                         column_config={
                                         'Stock': st.column_config.NumberColumn('Stock'),
