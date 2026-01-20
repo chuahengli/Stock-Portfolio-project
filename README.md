@@ -21,6 +21,7 @@ Look for the OpenD folder"moomoo_OpenD_9.6.5618_Windows" to configure the `OpenD
 1.  Set `YOUR_LOGIN_HERE` to your Moomoo login.
 2.  Set `YOUR_PASSWORD_HERE` to your password.
 3.  Set `RSA__KEY_FILEPATH_HERE` to the absolute path of your generated private key (see below).
+<img width="1098" height="601" alt="image" src="https://github.com/user-attachments/assets/e04e0d43-5e80-4050-96e0-bb6b3056e726" />
 
 ### 3. RSA Key Generation
 For security, this project uses RSA encryption.
