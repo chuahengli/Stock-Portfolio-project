@@ -1,11 +1,22 @@
-/.env
-**/OpenD.xml
-__pycache__
-/.ipynb_checkpoints/
-.aiexclude
+# Python
+__pycache__/
+*.pyc
 
-*.ipynb
+# Environment Variables
+.env
+
+# Database (Local storage)
 db/
 
+# Moomoo OpenD
+# Ignore the actual config file containing credentials
+**/OpenD.xml
+
+# Jupyter Notebooks
+*.ipynb
+/.ipynb_checkpoints/
+
+# Configuration for Windows Task Scheduler
 run_daily.bat
 daily_log.txt
+

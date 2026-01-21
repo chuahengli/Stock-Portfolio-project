@@ -44,7 +44,6 @@ dashboard.setup()
     
 
 # Helper to get the latest available date in DB
-@st.cache_data(scope = 'session')
 def get_latest_db_date():
     query = "SELECT date FROM portfolio_snapshots ORDER BY date DESC LIMIT 1"
     df = db.read_db(query)
