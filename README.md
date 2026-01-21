@@ -1,4 +1,4 @@
-#📈Moomoo Portfolio Tracker & Analyzer
+# 📈Moomoo Portfolio Tracker & Analyzer
 
 A tool that interfaces with the **Moomoo OpenD gateway** to store portfolio data into SQLite database and display a dashboard using **Streamlit**. This project is designed to automatically track daily portfolio value, positions, cash flow, and historical orders to track Time-Weighted Returns.
 <img width="1267" height="701" alt="image" src="https://github.com/user-attachments/assets/19b0c55f-c68b-412c-8e07-155af9e9be7c" />
@@ -73,21 +73,18 @@ For security, this project uses RSA encryption.
 
 ### 4. .env configuration(`.env`)
 1. Rename .env.example from this repo to .env
-2. Set `KEY_PATH` to the absolute file path of your RSA key .txt file by replacing `YOUR_RSA_KEY_PATH_HERE.txt`
-
-### 5. Account Cashflow History:
-Open your .env file and set START_DATE to the date you opened your Moomoo account (YYYY-MM-DD) as a string. This is to get all historical account cashflow data.
-
-
-
+2. Set `KEY_PATH` to the absolute file path of your RSA key .txt file.
+3. Set `START_DATE` to the date you opened your Moomoo account (YYYY-MM-DD) as a string.
+```bash
+KEY_PATH=YOUR_RSA_KEY_PATH_HERE.txt
+START_DATE="2023-08-07"
+```
 ### 6. Install Dependencies
 This project uses `pipenv` for dependency management. Run this line
 ```bash
 pip install pipenv
 pipenv install
 ```
-
-
 ## 📂 Project Structure
 
 ```text
@@ -106,11 +103,13 @@ pipenv install
 └── README.md             
 ```
 ## 📊 Usage
-1. Initialize/Update Database: Run the main script to fetch historical data and today's snapshot. Depending on how old the account is, obtaining account cashflow historically may take a while. Otherwise, after initialization, it should only take a few seconds.
+1. Initialize/Update Database:
+Run the main script to fetch historical cashflow data and today's snapshot.
+Depending on how old the account is, obtaining account cashflow historically **may take a while**. Otherwise, after initialization, it should only take a few seconds.
 ```bash
 pipenv run python main.py
 ```
-3. Launch Dashboard:
+2. Launch Dashboard:
 ```bash
 streamlit run streamlit_app.py
 ```
