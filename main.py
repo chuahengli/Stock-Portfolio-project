@@ -89,7 +89,8 @@ def cleanup_data(acc_info: pd.DataFrame, positions: pd.DataFrame, cashflow: pd.D
 
     return snapshot_df, positions_df, cashflow, historical_orders
 
-def update_db(snapshot_df: pd.DataFrame, positions_df: pd.DataFrame, cashflow: pd.DataFrame, historical_orders: pd.DataFrame,current_date: datetime):
+def update_db(snapshot_df: pd.DataFrame, positions_df: pd.DataFrame, cashflow: pd.DataFrame, historical_orders: pd.DataFrame,
+              current_date: datetime):
     ## Initialise and upload dataframes to db
     db.init_db()
     db.insert_dataframe(positions_df, 'positions')
@@ -106,6 +107,21 @@ def update_db(snapshot_df: pd.DataFrame, positions_df: pd.DataFrame, cashflow: p
 
     db.insert_dataframe(snapshot_df, 'portfolio_snapshots')
     db.insert_dataframe(db.net_p_l(current_date),'net_p_l')
+
+    
+    indices_dict = {
+        'SP500': '^GSPC',
+        'NASDAQ': '^IXIC',
+        'Russell 2000': '^RUT',
+        'FTSE 100': '^FTSE',
+        'Euro Stoxx 50': '^STOXX50E',
+        'Hang Seng': '^HSI',
+        'Nikkei 225': '^N225',
+        'STI': '^STI'
+    }
+    for index_name, ticker in indices_dict.items():
+        db.update_indices(ticker)
+    
     return 0
 
 
@@ -128,15 +144,12 @@ def main():
     if not os.path.exists(settings.MOOMOO_PORTFOLIO_DB_PATH):
         print("Database not found. Initializing and fetching all historical data...")
         upload_to_db(today_date, beginning_date,keep_opend_alive=False)
-        print("Database initialized successfully.")
+        
     else:
         today_str = today_date.strftime("%Y-%m-%d")
-        if not db.check_date_exists(today_str):
-            print("Database found, but today's snapshot is missing. Updating...")
-            upload_to_db(today_date, today_date - timedelta(days=30),keep_opend_alive=False)
-            print("Database updated successfully.")
-        else:
-            print(f"Portfolio snapshot for {today_str} is already up-to-date. Skipping data update.")
+        upload_to_db(today_date, today_date - timedelta(days=30),keep_opend_alive=False)
+    
+    print("Database initialized successfully.")
     return 0
 
 if __name__ == "__main__":

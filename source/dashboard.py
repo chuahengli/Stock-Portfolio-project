@@ -4,22 +4,16 @@ from source import db
 from datetime import date, datetime,timedelta
 import sqlite3
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib as mpl
-import mplcyberpunk
-import matplotlib.dates as mdates
 import re
 import plotly.express as px
 import plotly.graph_objects as go
 import yfinance as yf
+import functools
+import numpy as np
 
 
 
-def setup():
-    # Setup and configure default style and fontstyles
-    mpl.style.use('cyberpunk')
-    plt.rcParams['font.family'] = 'Calibri'
-    plt.rcParams['font.size'] = 12
+
 
 # Style Pandas dataframe
 def style_negative_red_positive_green(val):
@@ -34,11 +28,23 @@ def asset_allocation_data(current_date:datetime):
 
 def plot_asset_allocation(df: pd.DataFrame):
     df=df.copy().T
-    df.columns = ['Value']
+    df.columns = ['Value']    
     if df.empty:
-        # Return an empty figure or a message
-        fig, ax = plt.subplots()
-        ax.text(0.5, 0.5, "No Data Available", ha='center')
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No Data Available for selected range",
+            xref="paper", 
+            yref="paper",
+            x=0.5, 
+            y=0.5, 
+            showarrow=False,
+            font=dict(size=20, color="gray")
+        )
+        fig.update_layout(
+            template='plotly_dark',
+            xaxis=dict(visible=False),
+            yaxis=dict(visible=False)
+        )
         return fig
     
     total_assets = df['Value'].sum()
@@ -272,6 +278,7 @@ def plot_asset_trend(df: pd.DataFrame, start_date: datetime, end_date: datetime,
                         )
     return fig
 
+# Modify positions table to add the most information, to be filtered in other functions for displaying graphs and tables
 def display_pos(df: pd.DataFrame):
     pos_df = df.copy()
     # Add column is option or not
@@ -284,23 +291,69 @@ def display_pos(df: pd.DataFrame):
     # Grouping and Sorting: Calculate total portfolio % per ticker to sort groups by size
     # Convert 'Portfolio_Percent' (e.g., "12.5%") to float for calculation
     pos_df['Sort_Val'] = pos_df['Portfolio_Percent'].astype(str).str.rstrip('%').astype(float)
-    # Create new dataframe with Ticker total value for each ticker sum it
+    # Create new dataframe with each Ticker total percentage allocation for each ticker sum it 
     ticker_totals = pos_df.groupby('Ticker')['Sort_Val'].sum().reset_index(name='Ticker_Total_Val')
     # Merge onto Ticker column to match respective ticker, total ticker percentage on resepective ticker regardless option or stock
     pos_df = pos_df.merge(ticker_totals, on='Ticker')
-    # Sort by Ticker Total (desc), then by individual position value (desc)
+    # Sort by each Ticker Total (desc), then by individual position value within each Ticker (desc)
     pos_df = pos_df.sort_values(by=['Ticker_Total_Val', 'Sort_Val'], ascending=[False, False])
+    pos_df['Market_Cap'] = pos_df['Ticker'].apply(lambda x: get_mktcap(x))
     return pos_df
 
 def style_pos(pos_df: pd.DataFrame):
     # Reorder columns to show Ticker and Asset Type first
-    cols_order = ['Ticker', 'Symbol', 'Asset_Type'] + [c for c in pos_df.columns if c not in ['Ticker', 'Symbol', 'Asset_Type', 'Is_Option', 'Sort_Val', 'Ticker_Total_Val']]
+    cols_order = ['Ticker', 'Asset_Type'] + [c for c in pos_df.columns if c not in ['Ticker', 'Symbol', 'Asset_Type', 'Is_Option', 'Sort_Val', 'Ticker_Total_Val', 'Market_Cap','date']]
     pos_df_styled = pos_df[cols_order]
-    # Make P/L Green and Red if positive or negative
-    pos_df_styled = pos_df_styled.style.map(style_negative_red_positive_green, subset=['P_L_Percent','P_L', 'Today_s_P_L'])
-    return pos_df_styled
-
-
+    # Rename
+    pos_df_styled = pos_df_styled.rename(
+        columns={
+                'Asset_Type': 'Asset Type',
+                'Market_Value': 'Market Value',
+                'Diluted_Cost': 'Diluted Cost',
+                'Current_Price': 'Price',
+                'P_L_Percent': 'P/L %',
+                'P_L': 'P/L',
+                'Today_s_P_L': 'Today\'s P/L',
+                'Portfolio_Percent': 'Portfolio %'
+        }
+    )
+    # Chain styling: apply color based on numeric value first, then format for display.
+    return pos_df_styled.style.map(
+        style_negative_red_positive_green, subset=['P/L %', 'P/L', "Today's P/L"]
+    ).format({
+        'Quantity': '{:,.2f}', 'Price': '{:,.3f}', 'Market Value': '{:,.2f}',
+        'Diluted Cost': '{:,.3f}', 'P/L %': '{:+,.2f}%', 'P/L': '{:+,.2f}',
+        "Today's P/L": '{:+,.2f}'
+    }).hide(axis="index")
+'''
+        # Display positions dataframe
+        st.dataframe(pos_df_styled, hide_index=True,
+                     column_config={'date': None,
+                                    'Asset_Type': 'Asset Type',
+                                    'Symbol': None,
+                                    'Quantity': st.column_config.NumberColumn('Quantity',
+                                                                                  format="localized"),
+                                    
+                                    'Diluted_Cost': st.column_config.NumberColumn('Diluted Cost',
+                                                                                  format="localized"),                                      
+                                    'Market_Value': st.column_config.NumberColumn('Market Value',
+                                                                                  format="localized"),
+                                    'Current_Price': st.column_config.NumberColumn('Current Price',
+                                                                                  format="localized"),
+                                    'P_L_Percent': st.column_config.NumberColumn('P/L %',
+                                                                                  format="%.2f %%"),
+                                    'P_L': st.column_config.NumberColumn('P/L',
+                                                                                  format="localized"),
+                                    'Today_s_P_L': st.column_config.NumberColumn('Today\'s P/L',
+                                                                                  format="localized"),
+                                    'Portfolio_Percent': st.column_config.NumberColumn('Portfolio %',
+                                                                                  format="percent"),
+                                    'Market_Cap': None
+                                    } 
+                    )
+        '''
+'''
+# Ticker allocation, with options and stocks summed in one ticker
 def plot_pos(pos_df: pd.DataFrame):
     plot_df = pos_df.copy().groupby(['Ticker','Ticker_Total_Val'])['Market_Value'].sum().reset_index()
     plot_df.sort_values(by='Market_Value', inplace=True, ascending=True)
@@ -327,8 +380,10 @@ def plot_pos(pos_df: pd.DataFrame):
     fig.update_yaxes(type='category',title_text="")
     fig.update_xaxes(title_text="",showticklabels=False, visible=False)
     return fig
-    
-def get_sector(ticker_symbol):
+'''
+# Get sector of ticker symbol passed in via yfinance
+@functools.lru_cache(maxsize=30)
+def get_sector(ticker_symbol,month_tag: datetime = datetime.now().strftime("%Y-%m")):
     try:
         ticker = yf.Ticker(ticker_symbol)
         info = ticker.info
@@ -347,7 +402,7 @@ def get_sector(ticker_symbol):
         return sector, industry
     except Exception:
         return 'Unknown', 'Unknown'
-    
+# Sector allocation based on each position allocation
 def plot_sector_allocation(pos_df: pd.DataFrame):
     # Group Ticker and that Ticker's total percentage alloc, sum market value
     sector_df = pos_df.copy().groupby(['Ticker','Ticker_Total_Val'])['Market_Value'].sum().reset_index()
@@ -376,14 +431,153 @@ def plot_sector_allocation(pos_df: pd.DataFrame):
                         showlegend=False,
                         font=dict(
                             size=14
-                            )
-                        
+                            ),
+                        title= dict(
+                                    text="Sector",
+                                    font=dict(
+                                                size=24
+                                                )
+           
+                                                        
+                                            )
                         )
     fig_sector.update_traces(textfont_size=14, textposition='outside',cliponaxis=False)
     fig_sector.update_yaxes(type='category',title_text="")
-    fig_sector.update_xaxes(title_text="Allocation %",visible=False)
+    fig_sector.update_xaxes(visible=False)
     return fig_sector
     
+def positions_overview(pos_df: pd.DataFrame):
+    pos_copy_df = pos_df.copy()
+
+    # Group by Ticker and percentage alloc. Sum Market Value, Today's P/L and Total P/L
+    position_overview = pos_copy_df.groupby(['Ticker','Ticker_Total_Val'])[['Market_Value','Today_s_P_L','P_L']].sum().reset_index()
+    
+    # Get prices for stocks present in portfolio
+    prices_df = pos_copy_df.loc[pos_copy_df['Is_Option'] == False, ['Ticker', 'Current_Price']].drop_duplicates(subset=['Ticker'])
+    
+    # Identify tickers that only have options (missing from prices_df)
+    existing_tickers = set(prices_df['Ticker'])
+    all_tickers = set(position_overview['Ticker'])
+    missing_tickers = list(all_tickers - existing_tickers)
+    # Add missing tickers into prices_df with updated price from yfinance
+    if missing_tickers:
+        new_prices = []
+        for ticker in missing_tickers:
+            try:
+                # Use fast_info for better performance on single attributes
+                price = yf.Ticker(ticker).fast_info['last_price']
+                new_prices.append({'Ticker': ticker, 'Current_Price': price})
+            except Exception:
+                new_prices.append({'Ticker': ticker, 'Current_Price': 0.0})
+        
+        if new_prices:
+            prices_df = pd.concat([prices_df, pd.DataFrame(new_prices)], ignore_index=True)
+    # Add current price column to overview
+    position_overview = position_overview.merge(prices_df, on='Ticker', how='left')
+
+    # Condition for if option
+    condition = pos_copy_df['Is_Option'] == False
+    # Multiply cost and quantity, if shares, if not shares multiply by another 100, create to column Total Cost for more accurate P/L % calc
+    pos_copy_df['Total_Cost'] = np.where(
+        condition,
+        pos_copy_df['Diluted_Cost'] * pos_copy_df['Quantity'], # If True (Not an option)
+        pos_copy_df['Diluted_Cost'] * pos_copy_df['Quantity'] * 100 # If False (Is an option)
+    )
+    # Group by Ticker and sum for each Ticker, total cost of stock and options of same ticker
+    total_cost_df = pos_copy_df.groupby('Ticker')['Total_Cost'].sum().reset_index()
+    position_overview = position_overview.merge(total_cost_df, on='Ticker')
+    # Create P/L % column using Total_Cost
+    position_overview['P_L_Percent'] = (position_overview['P_L'] / position_overview['Total_Cost'])
+    # Set column order and remove Total_Cost column
+    cols_order = ['Ticker','Market_Value','Current_Price','P_L_Percent','P_L','Today_s_P_L','Ticker_Total_Val']
+    # Reorder columns
+    position_overview = position_overview[cols_order]
+    position_overview.sort_values(by='Ticker_Total_Val', inplace=True, ascending=False)
+    # Style using colour, green for positive red for negative for subset of columns
+    position_overview = position_overview.style.map(style_negative_red_positive_green, subset=['P_L', 'Today_s_P_L','P_L_Percent'])
+    return position_overview
+
+@functools.lru_cache(maxsize=30)
+def get_mktcap(ticker: str,month_tag: datetime = datetime.now().strftime("%Y-%m")):
+    return yf.Ticker(ticker).info.get('marketCap')
+def market_cap_class(market_cap: float):
+    if market_cap > 200000000000:
+        return 'Mega'
+    elif market_cap > 10000000000:
+        return 'Large'
+    elif market_cap > 2000000000:
+        return 'Mid'
+    elif market_cap > 300000000:
+        return 'Small'
+    elif market_cap > 50000000:
+        return 'Micro'
+    else:
+        return 'Nano'
+    
+def plot_mktcap(pos_df: pd.DataFrame):
+    market_cap_df = pos_df.copy().loc[:,['Ticker','Ticker_Total_Val','Market_Cap']].drop_duplicates().dropna()
+    market_cap_df['Market_Cap_Cat'] = market_cap_df['Market_Cap'].apply(market_cap_class)
+    market_cap_df = market_cap_df.groupby(['Market_Cap_Cat'])['Ticker_Total_Val'].sum().reset_index()
+    market_cap_df.sort_values(by='Ticker_Total_Val',inplace=True)
+    text_label = [f"{p/100: .2%}" for p in market_cap_df['Ticker_Total_Val']]
+    fig_mktcap = px.bar(market_cap_df, x='Ticker_Total_Val', y='Market_Cap_Cat', orientation='h',
+                    template='plotly_dark',text=text_label,height=400)
+    fig_mktcap.update_layout(
+                        xaxis=dict(automargin=True),
+                        yaxis=dict(tickfont=dict(size=14),automargin=True),
+                        xaxis_range=[0, max(market_cap_df['Ticker_Total_Val']) * 1.2],
+                        showlegend=False,
+                        font=dict(
+                            size=14
+                            ),
+                        title= dict(
+                                    text="Market Cap",
+                                    font=dict(
+                                                size=24
+                                                )       
+                                            )
+                        
+                        )
+    fig_mktcap.update_traces(textfont_size=14, textposition='outside',cliponaxis=False)
+    fig_mktcap.update_yaxes(type='category',title_text="")
+    fig_mktcap.update_xaxes(visible=False)
+    return fig_mktcap
+
+@functools.lru_cache(maxsize=30)
+def get_country(ticker: str,month_tag: datetime = datetime.now().strftime("%Y-%m")):
+    tk = yf.Ticker(ticker).info
+    try: 
+        return tk['country']
+    except Exception as e:
+        return None
+def plot_geog(pos_df: pd.DataFrame):
+    geog_df = pos_df.copy().loc[:,['Ticker','Ticker_Total_Val']].drop_duplicates().dropna()
+    geog_df['Country'] = geog_df['Ticker'].apply(lambda x: get_country(x))
+    geog_df = geog_df.groupby(['Country'])['Ticker_Total_Val'].sum().reset_index()
+    geog_df.sort_values(by='Ticker_Total_Val',inplace=True)
+
+    text_label = [f"{p/100: .2%}" for p in geog_df['Ticker_Total_Val']]
+    fig_geog = px.bar(geog_df, x='Ticker_Total_Val', y='Country', orientation='h',
+                    template='plotly_dark',text=text_label,height=400)
+    fig_geog.update_layout(
+                        xaxis=dict(automargin=True),
+                        yaxis=dict(tickfont=dict(size=14),automargin=True),
+                        xaxis_range=[0, max(geog_df['Ticker_Total_Val']) * 1.2],
+                        showlegend=False,
+                        font=dict(
+                            size=14
+                            ),
+                        title= dict(
+                                    text="Geography",
+                                    font=dict(
+                                                size=24
+                                                )           
+                                    )
+                        )
+    fig_geog.update_traces(textfont_size=14, textposition='outside',cliponaxis=False)
+    fig_geog.update_yaxes(type='category',title_text="")
+    fig_geog.update_xaxes(visible=False)
+    return fig_geog
 
 
 def main():
