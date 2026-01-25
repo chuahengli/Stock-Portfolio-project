@@ -11,36 +11,51 @@ import pandas as pd
 from typing import Optional, Dict, List
 import psutil
 from contextlib import contextmanager
+import socket
 
-def manage_opend():
-    opend_path = str(settings.OPEND_PATH)
-    # Check if OpenD is already running
-    existing_proc = None
-    for proc in psutil.process_iter(['name', 'pid']):
+def is_opend_responsive(host='127.0.0.1', port=11111):
+    """Checks if OpenD is actually listening on the port."""
+    try:
+        with socket.create_connection((host, port), timeout=1):
+            return True
+    except:
+        return False
+    
+def stop_opend():
+    """Forcefully kills any OpenD process (Clean reset)."""
+    for proc in psutil.process_iter(['name']):
         if proc.info['name'] == 'OpenD.exe':
-            existing_proc = proc
-            break
-    if existing_proc:
-        print(f"OpenD already running (PID: {existing_proc.info['pid']}). Using existing instance.")
-        # Return the existing process and True (it was already running)
-        return existing_proc, True
-    # If not running, start it
-    print("Starting new OpenD instance...")
-    new_proc = start_opend_headless(opend_path)
-    return new_proc, False
+            try:
+                proc.kill() 
+            except:
+                pass
 
-def start_opend_headless(opend_path: str):
+def ensure_opend_is_ready():
+    """Starts OpenD if not responding, returns True when ready."""
+    if is_opend_responsive():
+        return True
+
+    # If port is closed but process exists, it's a ghost. Kill it.
+    stop_opend()
+    
+    print("Starting fresh OpenD instance...")
+    opend_path = str(settings.OPEND_PATH)
     try:
         if os.name == 'nt': # Windows
-            process = subprocess.Popen([opend_path], creationflags=subprocess.CREATE_NEW_CONSOLE)
+                process = subprocess.Popen([opend_path], creationflags=subprocess.CREATE_NEW_CONSOLE)
         else: # Linux/macOS
             process = subprocess.Popen([opend_path])
-        print(f"OpenD started with PID: {process.pid}")
-        print("Connecting to OpenD via API...")
-        return process
-    except FileNotFoundError:
+    except:
         print(f"Error: OpenD executable not found at {opend_path}")
-        return None
+    
+    '''Wait up to 15 seconds for the port to open'''
+    for _ in range(15):
+        if is_opend_responsive():
+            print("OpenD is now online.")
+            return True
+        time.sleep(1)
+    return False
+    
 
 
 def configure_moomoo_api():
@@ -126,26 +141,12 @@ def get_historical_orders(trade_obj: OpenSecTradeContext):
         return data 
     else:
         raise Exception('history_order_list_query error: ', data)
-    
-# Manually shut down OpenD.exe
-def stop_opend():
-    """Finds and stops any running OpenD processes."""
-    for proc in psutil.process_iter(['name', 'pid']):
-        if proc.info['name'] == 'OpenD.exe':
-            print(f"Stopping OpenD (PID: {proc.info['pid']})...")
-            try:
-                proc.terminate()
-                proc.wait(timeout=2)
-            except psutil.TimeoutExpired:
-                proc.kill()
-            except psutil.NoSuchProcess:
-                pass
 
 # Manage context, and whether keep openD alive or kill it
 @contextmanager
 def opend_session(keep_alive: bool = False):
     """Context manager to handle OpenD lifecycle."""
-    proc_handle, was_already_running = manage_opend()
+    ensure_opend_is_ready()
     trade_ctx = None
     try:
         trade_ctx = configure_moomoo_api()
@@ -153,17 +154,8 @@ def opend_session(keep_alive: bool = False):
     finally:
         if trade_ctx:
             trade_ctx.close()
-        
-        if proc_handle and not was_already_running and not keep_alive:
-            print("Shutting down OpenD...")
-            proc_handle.terminate()
-            try:
-                proc_handle.wait(timeout=2)
-            except (subprocess.TimeoutExpired, psutil.TimeoutExpired):
-                print("OpenD didn't close, forcing kill...")
-                proc_handle.kill()
-        else:
-            print("Keeping OpenD running for faster future updates...")
+        if not keep_alive:
+            stop_opend()
 
 def main():
     return 0

@@ -12,8 +12,14 @@ from source import dashboard, db, moomoo_api
 from config import settings
 import main  # To access upload_to_db logic
 
-# Register cleanup function to stop OpenD when the script exits (Ctrl+C)
 atexit.register(moomoo_api.stop_opend)
+
+@st.cache_resource
+def persistent_opend():
+    """Return True if OpenD is ready, False otherwise. Cache so that it's only checked once."""
+    return moomoo_api.ensure_opend_is_ready()
+
+persistent_opend()
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -22,35 +28,18 @@ st.set_page_config(
     page_icon="📈",
     initial_sidebar_state="auto"
 )
-
-# --- Sidebar: Actions ---
-with st.sidebar:
-    st.title("Controls")
-    st.write("Manage your portfolio data.")
-    # --- Live Mode Toggle ---
-    live_mode = st.toggle("🔴 Live Mode", value=True, help="Auto-refresh data every 10 seconds.")
-    refresh_rate = 10
-
-    if live_mode:
-        st.caption(f"Auto-refreshing every {refresh_rate}s...")
+    
     
 
 # --- Main Dashboard ---
 st.title("📈 Moomoo Portfolio Dashboard", text_alignment = 'center')
+# --- Live Mode Toggle ---
+live_mode = st.toggle("🔴 Live Mode", value=True, help="Auto-refresh data every 10 seconds.")
+refresh_rate = 10
+if live_mode:
+        st.caption(f"Auto-refreshing every {refresh_rate}s...")
 
-
-# Setup styles
-dashboard.setup()
     
-
-# Helper to get the latest available date in DB
-def get_latest_db_date():
-    query = "SELECT date FROM portfolio_snapshots ORDER BY date DESC LIMIT 1"
-    df = db.read_db(query)
-    if not df.empty:
-        return datetime.strptime(df.iloc[0]['date'], '%Y-%m-%d')
-    return None
-
 
 @st.cache_data(scope = 'session')
 def get_past_data(today_str: str):
@@ -86,7 +75,7 @@ def live_update_db():
 @st.fragment(run_every=refresh_rate if live_mode else None)
 def render_live():
     current_time = datetime.now().strftime('%b %d, %Y %H:%M:%S')
-    latest_date = get_latest_db_date()
+    latest_date = db.get_latest_db_date()
     
     if not latest_date:
         st.info("No data found in database. Please click 'Update Data from API' in the sidebar.")
@@ -122,14 +111,15 @@ def render_live():
         curr = snapshot_df.iloc[0]
         prev = prev_snapshot_df.iloc[0]
         def get_metric_delta(curr, prev, column_name: str):
-            return curr[column_name], round(curr[column_name] - prev[column_name],2)
+            change = round(curr[column_name] - prev[column_name],2)
+            percentage_change = (curr[column_name] - prev[column_name]) / prev[column_name]
+            delta = f"{change} ({percentage_change:.2%})" if percentage_change != 0 else f"{change} (0.0%)"
+            return curr[column_name], delta
         
-        col1_metric = curr['stocks']+curr['cash']+curr['options']
-        col1_delta = round(col1_metric - prev['stocks']-prev['cash']-prev['options'],2)
+        col1_metric,col1_delta = get_metric_delta(curr, prev, 'total_assets')
         col2_metric, col2_delta = get_metric_delta(curr, prev, 'stocks')
         col3_metric, col3_delta = get_metric_delta(curr, prev, 'options')
         col4_metric, col4_delta = get_metric_delta(curr, prev, 'cash')
-        #col5_metric, col5_delta = get_metric_delta(curr, prev, 'nav')
         col1, col2, col3, col4, col6 = st.columns(5)
         col1.metric("Total Assets (SGD)", f"${col1_metric:,.2f}",delta=col1_delta)
         col2.metric("Stocks", f"${col2_metric:,.2f}", delta=col2_delta)
@@ -152,8 +142,8 @@ def render_live():
         total_assets = alloc_df.sum(axis=1).values[0]
         
 
-        col2, col3 = st.columns(2)
-        with col2:
+        asset_trend, twr_trend,asset_alloc = st.columns([4,4,2])
+        with asset_trend:
             st.markdown(
                     f"<span style='font-size:24px;'>Total Assets(SGD): ${total_assets:,.2f}</span>",
                     unsafe_allow_html=True
@@ -163,12 +153,8 @@ def render_live():
                                                    latest_date,
                                                    'total_assets','Total Assets')
             st.plotly_chart(fig_trend)
-        with col3:
-            #st.subheader("Time Weighted Returns")
-            #st.text("Time Weighted Returns (TWR)")
+        with twr_trend:
             sign = "+" if float(returns_str.replace('%', '')) >= 0 else ""
-            #col3.metric("Time Weighted Returns", f"{returns_str}")
-            #st.markdown(f"**{returns_str}**")
             if float(returns_str.replace('%', '')) >= 0:
                 st.markdown(
                     f"<span style='font-size:24px;'>Time Weighted Returns: </span>"
@@ -191,18 +177,45 @@ def render_live():
                                                    latest_date,
                                                    'Percent_Change','twr')
             st.plotly_chart(fig_twr)
-        
-        asset_alloc_col, sector_alloc_col = st.columns([0.5,0.5])
-        
-        with asset_alloc_col:
+
+        with asset_alloc:
             if not alloc_df.empty:
                 fig_alloc = dashboard.plot_asset_allocation(alloc_df)
                 st.plotly_chart(fig_alloc)
             else:
                 st.warning("No allocation data for this date.")
+            
+        
+        sector_alloc_col,mktcap_alloc,pos_overview = st.columns([3.5,2.5,4])
 
         with sector_alloc_col:
             st.plotly_chart(dashboard.plot_sector_allocation(pos_df))
+            st.plotly_chart(dashboard.plot_geog(pos_df))
+        with mktcap_alloc:
+            st.plotly_chart(dashboard.plot_mktcap(pos_df))
+        #with geog_alloc:
+            #st.plotly_chart(dashboard.plot_geog(pos_df))
+        
+        
+        with pos_overview:
+            st.dataframe(dashboard.positions_overview(pos_df), hide_index=True,
+                        column_config={'Market_Value': st.column_config.NumberColumn('Market Value',
+                                                                                    format="localized"),
+                                        'Current_Price': st.column_config.NumberColumn('Current Price',
+                                                                                    format="%.2f"),
+                                        'P_L_Percent': st.column_config.NumberColumn('P/L %',
+                                                                                  format="percent"),
+                                        'P_L': st.column_config.NumberColumn('P/L',
+                                                                                    format="%+.2f"),
+                                        'Today_s_P_L': st.column_config.NumberColumn('Today\'s P/L',
+                                                                                    format="%+.2f"),
+                                        'Ticker_Total_Val': st.column_config.NumberColumn('Portfolio %',
+                                                                                    format="%.2f %%")
+                                        } 
+                        )
+
+        
+        
 
     
     
@@ -210,34 +223,11 @@ def render_live():
     with positions:
         st.subheader(f"Positions as of {latest_date.strftime('%b %d, %Y')}")
         pos_df_styled = dashboard.style_pos(pos_df)
-
+        st.table(pos_df_styled)
         
         
-        # Display positions dataframe
-        st.dataframe(pos_df_styled, hide_index=True,
-                     column_config={'date': None,
-                                    'Quantity': st.column_config.NumberColumn('Quantity',
-                                                                                  format="localized"),
-                                    
-                                    'Diluted_Cost': st.column_config.NumberColumn('Diluted Cost',
-                                                                                  format="localized"),                                      
-                                    'Market_Value': st.column_config.NumberColumn('Market Value',
-                                                                                  format="localized"),
-                                    'Current_Price': st.column_config.NumberColumn('Current Price',
-                                                                                  format="localized"),
-                                    'P_L_Percent': st.column_config.NumberColumn('P/L %',
-                                                                                  format="%.2f %%"),
-                                    'P_L': st.column_config.NumberColumn('P/L',
-                                                                                  format="localized"),
-                                    'Today_s_P_L': st.column_config.NumberColumn('Today\'s P/L',
-                                                                                  format="localized"),
-                                    'Portfolio_Percent': st.column_config.NumberColumn('Portfolio %',
-                                                                                  format="percent")
-                                    } 
-                    )
         
-        
-        st.plotly_chart(dashboard.plot_pos(pos_df))
+        #st.plotly_chart(dashboard.plot_pos(pos_df))
         
 
 

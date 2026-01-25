@@ -3,10 +3,12 @@ from config import settings
 
 import sqlite3
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, date
 import re
 import numpy as np
 from contextlib import contextmanager
+import yfinance as yf
+import functools
 
 # Manage the open and close of database
 @contextmanager
@@ -50,7 +52,7 @@ def init_db():
         Portfolio_Percent REAL,
         date TEXT,
         FOREIGN KEY (date) REFERENCES portfolio_snapshots (date),
-        PRIMARY KEY(Symbol, date) ON CONFLICT REPLACE
+        PRIMARY KEY(Symbol, date) 
     )
     """
     # Create historical_orders table
@@ -90,6 +92,21 @@ def init_db():
         PRIMARY KEY(Symbol, Market, Currency)
     )
     """
+
+    # Create benchmark indices table
+    benchmark_history_table = """
+    CREATE TABLE IF NOT EXISTS benchmark_history (
+        Date TEXT,
+        Close NUMERIC,
+        High NUMERIC,
+        Low NUMERIC,
+        Open NUMERIC,
+        Volume NUMERIC,
+        Symbol TEXT,
+        PRIMARY KEY (Date, Symbol)
+    )
+    """
+
     with db_contextmanager() as conn:
         cursor = conn.cursor()
         cursor.execute(portfolio_snapshots_table)
@@ -97,6 +114,7 @@ def init_db():
         cursor.execute(historical_orders_table)
         cursor.execute(cashflow_table)
         cursor.execute(net_p_l_table)
+        cursor.execute(benchmark_history_table)
 
 def table_empty(table_name:str):
     with db_contextmanager() as conn:
@@ -159,17 +177,6 @@ def calc_nav_units(current_date: datetime, snapshot_df: pd.DataFrame):
     print(f"Update Complete. New NAV: {new_nav:.4f}, Net CF: {net_cf:.2f}, New Units: {new_units:.4f}")
     return new_nav, new_units
 
-def check_date_exists(date_str: str) -> bool:
-    with db_contextmanager() as conn:
-        cursor = conn.cursor()
-        try:
-            query = "SELECT 1 FROM portfolio_snapshots WHERE date = ?"
-            cursor.execute(query, (date_str,))
-            result = cursor.fetchone()
-        except sqlite3.OperationalError:
-            # Table might not exist yet
-            result = None
-    return result is not None
 
 # Get historical orders dataframe
 def historical_orders_data():
@@ -226,6 +233,50 @@ def net_p_l(today_date: datetime):
     net_P_L = pd.concat([historical_orders_p_l,positions_mv],ignore_index=True)
     net_P_L = net_P_L.groupby(['Symbol', 'Market', 'Currency'])[['Net_P_L']].sum().reset_index()
     return net_P_L
+
+@functools.lru_cache()
+# Helper to get the latest available date in portfolio_snapshots table
+def get_latest_db_date(today_date = datetime.combine(date.today(), datetime.min.time())):
+    query = "SELECT date FROM portfolio_snapshots ORDER BY date DESC LIMIT 1"
+    df = read_db(query)
+    if not df.empty:
+        return datetime.strptime(df.iloc[0]['date'], '%Y-%m-%d')
+    return None
+
+        
+
+def indices_exists(index_name: str):
+    query = "SELECT EXISTS (SELECT 1 FROM benchmark_history WHERE Symbol LIKE ?)"
+    search_term = f"%{index_name}%"
+    try:
+        with db_contextmanager() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, (search_term,))
+            result = cursor.fetchone()
+            
+            return result[0] == 1 if result else False
+            
+    except Exception as e:
+        print(f"Database error checking index {index_name}: {e}")
+        return False 
+        
+def historical_close_prices(ticker: str,period: str, interval: str):
+    data = yf.download(ticker, period= period, interval=interval,multi_level_index=False)
+    data.reset_index(inplace=True)
+    data['Symbol'] = ticker
+    return data
+@functools.lru_cache(maxsize=10)
+def update_indices(index_name: str,today_date = datetime.combine(date.today(), datetime.min.time())):
+    if indices_exists(index_name):
+        data = historical_close_prices(index_name, period='1mo',interval='1d')
+        insert_dataframe(data,'benchmark_history')
+    else: 
+        data = historical_close_prices(index_name, period='max',interval='1d')
+        insert_dataframe(data,'benchmark_history')
+
+
+
+
 
 
 def main():
