@@ -109,16 +109,7 @@ def update_db(snapshot_df: pd.DataFrame, positions_df: pd.DataFrame, cashflow: p
     db.insert_dataframe(db.net_p_l(current_date),'net_p_l')
 
     
-    indices_dict = {
-        'SP500': '^GSPC',
-        'NASDAQ': '^IXIC',
-        'Russell 2000': '^RUT',
-        'FTSE 100': '^FTSE',
-        'Euro Stoxx 50': '^STOXX50E',
-        'Hang Seng': '^HSI',
-        'Nikkei 225': '^N225',
-        'STI': '^STI'
-    }
+    indices_dict = db.indices_dict()
     for index_name, ticker in indices_dict.items():
         db.update_indices(ticker)
     

@@ -19,7 +19,7 @@ def persistent_opend():
     """Return True if OpenD is ready, False otherwise. Cache so that it's only checked once."""
     return moomoo_api.ensure_opend_is_ready()
 
-persistent_opend()
+
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -42,23 +42,33 @@ if live_mode:
     
 
 @st.cache_data(scope = 'session')
-def get_past_data(today_str: str):
+def past_data(today_str: str,table_name: str):
     with db.db_contextmanager() as conn:
-        portfolio_snapshots_df = pd.read_sql_query("SELECT * FROM portfolio_snapshots WHERE date < ?", conn, params=(today_str,))
-        #positions_df = pd.read_sql_query("SELECT * FROM positions WHERE date < ?", conn, params=(today_str,))
-        #cashflow_df = pd.read_sql_query(f"SELECT * FROM cashflow", conn)
-        #historical_orders_df = pd.read_sql_query(f"SELECT * FROM historical_orders", conn)
-        #net_p_l_df = pd.read_sql_query(f"SELECT * FROM net_p_l", conn)
-    return portfolio_snapshots_df#, positions_df, cashflow_df, historical_orders_df
+        past_data_df = pd.read_sql_query(f"SELECT * FROM {table_name} WHERE date < ?", conn, params=(today_str,))
+    return past_data_df
 # cache to store for refresh rate so that any calls to the function use the stored value instead before next run
 @st.cache_data(ttl=refresh_rate)
-def get_live_data(today_str: str):
+def live_data(today_str: str,table_name: str):
     with db.db_contextmanager() as conn:
-        portfolio_snapshots_df = pd.read_sql_query("SELECT * FROM portfolio_snapshots WHERE date = ?", conn, params=(today_str,))
-    return portfolio_snapshots_df
-def get_combined_data():
-    today_str = date.today().strftime('%Y-%m-%d')
-    full_df = pd.concat([get_past_data(today_str), get_live_data(today_str)]).sort_values('date',ascending=True).reset_index(drop=True)
+        live_data_df = pd.read_sql_query(f"SELECT * FROM {table_name} WHERE date = ?", conn, params=(today_str,))
+    return live_data_df
+
+def combined_data(table_name: str):
+    if table_name == 'portfolio_snapshots':
+        today_str = date.today().strftime('%Y-%m-%d')
+        sort_col = 'date'
+    elif table_name == 'benchmark_history':
+        today_str = datetime.combine(date.today(), datetime.min.time())
+        sort_col = 'Date'
+    
+    p_data = past_data(today_str, table_name)
+    l_data = live_data(today_str, table_name)
+    
+    # Filter out empty dataframes to avoid FutureWarning about concatenation with empty/NA entries
+    dfs = [df for df in [p_data, l_data] if not df.empty]
+    
+    full_df = pd.concat(dfs) if dfs else p_data
+    full_df = full_df.sort_values(sort_col, ascending=True).reset_index(drop=True)
     return full_df
 
 
@@ -75,14 +85,15 @@ def live_update_db():
 @st.fragment(run_every=refresh_rate if live_mode else None)
 def render_live():
     current_time = datetime.now().strftime('%b %d, %Y %H:%M:%S')
-    latest_date = db.get_latest_db_date()
+    latest_date = db.get_latest_db_date(datetime.combine(date.today(), datetime.min.time()))
     
     if not latest_date:
         st.info("No data found in database. Please click 'Update Data from API' in the sidebar.")
         return
     
     previous_date = latest_date - timedelta(days=1)
-    portfolio_snapshots_df = get_combined_data()
+    portfolio_snapshots_df = combined_data('portfolio_snapshots')
+    benchmark_df = combined_data('benchmark_history')                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
     pos_df = db.read_db(f"SELECT * FROM positions WHERE date = '{latest_date.strftime('%Y-%m-%d')}'")
     pos_df=dashboard.display_pos(pos_df)
 
@@ -148,10 +159,7 @@ def render_live():
                     f"<span style='font-size:24px;'>Total Assets(SGD): ${total_assets:,.2f}</span>",
                     unsafe_allow_html=True
                 )
-            fig_trend = dashboard.plot_asset_trend(portfolio_snapshots_df, 
-                                                   datetime.strptime('2026-01-12', '%Y-%m-%d'), 
-                                                   latest_date,
-                                                   'total_assets','Total Assets')
+            fig_trend = dashboard.plot_asset_trend(portfolio_snapshots_df)
             st.plotly_chart(fig_trend)
         with twr_trend:
             sign = "+" if float(returns_str.replace('%', '')) >= 0 else ""
@@ -171,12 +179,9 @@ def render_live():
                     f"<span style='color:red; font-size:24px;'>{sign}{returns_str}</span>", 
                     unsafe_allow_html=True
                 )
-
-            fig_twr = dashboard.plot_asset_trend(portfolio_snapshots_df, 
-                                                   datetime.strptime('2026-01-12', '%Y-%m-%d'), 
-                                                   latest_date,
-                                                   'Percent_Change','twr')
-            st.plotly_chart(fig_twr)
+            comparison = dashboard.comparison_df(portfolio_snapshots_df, benchmark_df)
+            fig_comparison = dashboard.plt_performance_comparison(dashboard.comparison_percent(comparison))
+            st.plotly_chart(fig_comparison)
 
         with asset_alloc:
             if not alloc_df.empty:
@@ -186,16 +191,9 @@ def render_live():
                 st.warning("No allocation data for this date.")
             
         
-        sector_alloc_col,mktcap_alloc,pos_overview = st.columns([3.5,2.5,4])
-
-        with sector_alloc_col:
-            st.plotly_chart(dashboard.plot_sector_allocation(pos_df))
-            st.plotly_chart(dashboard.plot_geog(pos_df))
-        with mktcap_alloc:
-            st.plotly_chart(dashboard.plot_mktcap(pos_df))
-        #with geog_alloc:
-            #st.plotly_chart(dashboard.plot_geog(pos_df))
-        
+        portfolio_characteristics,pos_overview = st.columns([6.5,3.5])
+        with portfolio_characteristics:
+            st.plotly_chart(dashboard.plot_portfolio_characteristics(pos_df))
         
         with pos_overview:
             st.dataframe(dashboard.positions_overview(pos_df), hide_index=True,
@@ -225,9 +223,6 @@ def render_live():
         pos_df_styled = dashboard.style_pos(pos_df)
         st.table(pos_df_styled)
         
-        
-        
-        #st.plotly_chart(dashboard.plot_pos(pos_df))
         
 
 
@@ -262,4 +257,5 @@ def render_live():
                         )
 
 render_live()  
+persistent_opend()
 live_update_db()
