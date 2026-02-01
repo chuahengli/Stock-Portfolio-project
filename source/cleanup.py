@@ -73,7 +73,7 @@ def cleanup_positions(positions:pd.DataFrame):
 
 # Cache last 16, and every hour, according to datetime object
 @functools.lru_cache(maxsize=16)
-def get_exchange_rate(from_currency:str,to_currency:str,current_hour_tag = datetime.now().strftime("%Y-%m-%d-%H")):
+def get_exchange_rate(from_currency:str,to_currency:str,current_hour_tag):
     if from_currency == to_currency:
         return 1.0
     ticker = f"{from_currency}{to_currency}=X" if to_currency != 'USD' else f"{from_currency}=X"
@@ -100,8 +100,11 @@ def get_exchange_rate(from_currency:str,to_currency:str,current_hour_tag = datet
     
             
 
-def convert_currency(value, from_currency:str, to_currency:str,current_hour_tag = datetime.now().strftime("%Y-%m-%d-%H")) -> Optional[float]:
+def convert_currency(value, from_currency:str, to_currency:str,current_hour_tag = None) -> Optional[float]:
     """Converts a given amount from one currency to another."""
+    # Set the current hour tag for caching for get_exchange_rate
+    if current_hour_tag is None:
+        current_hour_tag = datetime.now().strftime("%Y-%m-%d-%H")
     rate = get_exchange_rate(from_currency, to_currency,current_hour_tag)
     if rate:
         converted_amount = value * rate

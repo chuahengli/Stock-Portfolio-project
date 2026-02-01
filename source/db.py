@@ -230,13 +230,18 @@ def net_p_l(today_date: datetime):
     
     positions_mv.drop(['Market_Value','P_L'], axis=1, inplace=True) 
     # Concat, then do the same group by and sum to get true net P/L
-    net_P_L = pd.concat([historical_orders_p_l,positions_mv],ignore_index=True)
+    dfs = [df for df in [historical_orders_p_l, positions_mv] if not df.empty]
+    if dfs:
+        net_P_L = pd.concat(dfs, ignore_index=True)
+    else:
+        # Return empty dataframe with correct columns if both are empty
+        net_P_L = historical_orders_p_l
+
     net_P_L = net_P_L.groupby(['Symbol', 'Market', 'Currency'])[['Net_P_L']].sum().reset_index()
     return net_P_L
 
-@functools.lru_cache()
 # Helper to get the latest available date in portfolio_snapshots table
-def get_latest_db_date(today_date = datetime.combine(date.today(), datetime.min.time())):
+def get_latest_db_date(today_date: datetime):
     query = "SELECT date FROM portfolio_snapshots ORDER BY date DESC LIMIT 1"
     df = read_db(query)
     if not df.empty:
@@ -265,7 +270,6 @@ def historical_close_prices(ticker: str,period: str, interval: str):
     data.reset_index(inplace=True)
     data['Symbol'] = ticker
     return data
-@functools.lru_cache(maxsize=10)
 def update_indices(index_name: str,today_date = datetime.combine(date.today(), datetime.min.time())):
     if indices_exists(index_name):
         data = historical_close_prices(index_name, period='1mo',interval='1d')
@@ -273,6 +277,19 @@ def update_indices(index_name: str,today_date = datetime.combine(date.today(), d
     else: 
         data = historical_close_prices(index_name, period='max',interval='1d')
         insert_dataframe(data,'benchmark_history')
+
+def indices_dict():
+    indices_dict = {
+        'SP500': '^GSPC',
+        'NASDAQ': '^IXIC',
+        'Russell 2000': '^RUT',
+        'FTSE 100': '^FTSE',
+        'Euro Stoxx 50': '^STOXX50E',
+        'Hang Seng Index': '^HSI',
+        'Nikkei 225': '^N225',
+        'STI': '^STI'
+    }
+    return indices_dict
 
 
 

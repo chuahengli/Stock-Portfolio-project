@@ -99,7 +99,7 @@ def get_positions(trade_obj: OpenSecTradeContext):
         return None
 
 def account_cashflow(trade_obj: OpenSecTradeContext, current_date: datetime, end_date: datetime):
-    cash_flow_data = pd.DataFrame()
+    cash_flow_list = []
     request_count = 0
     start_time = time.time()
     
@@ -120,7 +120,7 @@ def account_cashflow(trade_obj: OpenSecTradeContext, current_date: datetime, end
 
         if ret == moomoo.RET_OK:
             if not data.empty:
-                cash_flow_data = pd.concat([cash_flow_data, data], ignore_index=True)
+                cash_flow_list.append(data)
             request_count += 1
             current_date -= timedelta(days=1)
 
@@ -129,6 +129,12 @@ def account_cashflow(trade_obj: OpenSecTradeContext, current_date: datetime, end
             time.sleep(30)
             start_time = time.time()
             request_count = 0
+            
+    if cash_flow_list:
+        cash_flow_data = pd.concat(cash_flow_list, ignore_index=True)
+    else:
+        cash_flow_data = pd.DataFrame()
+
     if cash_flow_data.empty:
         # Handle the case where no cashflow data was retrieved
         print("Warning: No cashflow data found for the given period.")
