@@ -12,10 +12,6 @@ import yfinance as yf
 import functools
 import numpy as np
 
-
-
-
-
 # Style Pandas dataframe
 def style_negative_red_positive_green(val):
             color = '#A52A2A' if val < 0 else '#4CAF50'
@@ -240,7 +236,6 @@ def plot_asset_trend(df: pd.DataFrame):
     
     fig.update_traces(line=dict(width=4),
                       hovertemplate="<br>".join([
-                            "Date: %{x|%b %d, %Y}",
                             "Total Assets: $%{y:,.2f}",
                             "<extra></extra>"  # Removes the trace name box on the side
                         ])
@@ -254,7 +249,8 @@ def plot_asset_trend(df: pd.DataFrame):
                             dict(automargin=True,title="",showgrid=False, visible=False),
                         hovermode="x unified",
                         hoverlabel=dict(
-                            font_size=14
+                            font_size=14,
+                            bgcolor="rgba(30, 30, 30, 0.8)"
                             )
                         )
     return fig
@@ -307,24 +303,38 @@ def comparison_percent(df: pd.DataFrame):
 def plt_performance_comparison(percent_df: pd.DataFrame):
     fig = go.Figure()
     plt_cols = [col for col in percent_df.columns if col not in ['date','Portfolio']]
-
+    '''Function to format legend name for each line'''
+    def get_legend_name(name, df_col):
+        if not df_col.empty:
+            last_val = df_col.iloc[-1]
+            # Formats as "SP500: +5.23%" or "SP500: -1.20%"
+            return f"{name}: {last_val:+.2f}%"
+        return name
+    
     for col in plt_cols:
         fig.add_trace(go.Scatter(
                 x=percent_df['date'], 
                 y=percent_df[col],
-                name= col,
+                name= get_legend_name(col, percent_df[col]),
+                # Store in customdata the index name, same number of rows as the original dataframe
+                customdata=[[col]] * len(percent_df),
                 mode='lines',
-                #line=dict(width=1, shape='spline'),
+                line=dict(width=1),
                 visible= True if col in ['SP500','NASDAQ', 'STI'] else 'legendonly',
-                opacity=0.6
+                opacity=0.8,
+                # Dynamic hover template: "Index Name: Value%"
+                hovertemplate="%{customdata[0]}: %{y:.2f}%<extra></extra>"
             ))
     fig.add_trace(go.Scatter(
                 x=percent_df['date'], 
                 y=percent_df['Portfolio'],
-                name= 'My Portfolio',
+                name= get_legend_name('My Portfolio', percent_df['Portfolio']),
+                customdata=[['My Portfolio']] * len(percent_df),
                 mode='lines',
                 line=dict(color='#00FFCC', width=4),
                 visible= True,
+                # Bold the portfolio to make it stand out in the hover list
+                hovertemplate="%{customdata[0]}: %{y:.2f}%<extra></extra>"
             ))
     fig.update_layout(
         template='plotly_dark',
@@ -334,15 +344,26 @@ def plt_performance_comparison(percent_df: pd.DataFrame):
             orientation="h",
             yanchor="bottom",
             y=1.02,
-            xanchor="right",
-            x=1
+            xanchor="center",
+            x=0.5,
+            entrywidth=0,
+            entrywidthmode='pixels',
+            font = dict(size=14)
         ),
-        xaxis=dict(automargin=True,tickfont=dict(size=16),title="",
+        hoverlabel=dict(
+            bgcolor="rgba(30, 30, 30, 0.8)", # Semi-transparent dark background
+            font_size=14
+        ),
+        xaxis=dict(automargin=True,tickfont=dict(size=14),title="",
             showgrid=False,
             rangeslider=dict(visible=False),
             type="date"
             ),
-        yaxis=dict(automargin=True,visible=False)
+        yaxis=dict(automargin=True,
+                   showticklabels=True,
+                   tickfont=dict(size=14),
+                   ticksuffix="%",
+                   gridcolor='rgba(255,255,255,0.1)')
     )
     return fig
 
@@ -508,34 +529,71 @@ def get_country(ticker: str,month_tag: datetime = datetime.now().strftime("%Y-%m
 
 def plot_portfolio_characteristics(pos_df: pd.DataFrame):
     # Grouping data for each subplot
-    sector_df = pos_df.groupby('Sector')['Ticker_Total_Val'].sum().reset_index().sort_values('Ticker_Total_Val')
-    geo_df = pos_df.groupby('Country')['Ticker_Total_Val'].sum().reset_index().sort_values('Ticker_Total_Val')
-    mc_df = pos_df.groupby('Market_Cap_Cat')['Ticker_Total_Val'].sum().reset_index().sort_values('Ticker_Total_Val')
+    sector_df = pos_df.groupby('Sector')['Sort_Val'].sum().reset_index().sort_values('Sort_Val')
+    geo_df = pos_df.groupby('Country')['Sort_Val'].sum().reset_index().sort_values('Sort_Val')
+    mc_df = pos_df.groupby('Market_Cap_Cat')['Sort_Val'].sum().reset_index().sort_values('Sort_Val')
     mc_df = mc_df[mc_df['Market_Cap_Cat'] != 'Unknown']
-
+    '''Configure Subplots'''
     fig = make_subplots(
-        rows=1, cols=3,
-        specs=[[{'type': 'xy'}, {'type': 'xy'}, {'type': 'xy'}]],
+        rows=2, cols=2,
+        specs=[
+            [{'type': 'bar'}, {'type': 'bar'}],
+            [{'type': 'bar'},None]
+            ],
         subplot_titles=("Sector", "Geography", "Market Cap")
     )
+    '''Add traces, then label each bar with percentages'''
     fig.add_trace(
-        go.Bar(x=sector_df['Ticker_Total_Val'], y=sector_df['Sector'], orientation='h', name="Sector"),
+        go.Bar(
+            x=sector_df['Sort_Val'],
+            y=sector_df['Sector'],
+            orientation='h',
+            text = [f"{val:.2f}%" for val in sector_df['Sort_Val']],
+            textposition='outside',
+            cliponaxis=False,
+            name="Sector"),
         row=1, col=1
     )
     fig.add_trace(
-        go.Bar(x=geo_df['Ticker_Total_Val'], y=geo_df['Country'], orientation='h', name="Geography"),
+        go.Bar(
+            x=geo_df['Sort_Val'],
+            y=geo_df['Country'],
+            orientation='h',
+            text = [f"{val:.2f}%" for val in geo_df['Sort_Val']],
+            textposition='outside',
+            cliponaxis=False,
+            name="Geography"),
         row=1, col=2
     )
     fig.add_trace(
-        go.Bar(x=mc_df['Ticker_Total_Val'], y=mc_df['Market_Cap_Cat'], orientation='h', name="Market Cap"),
-        row=1, col=3
+        go.Bar(
+            x=mc_df['Sort_Val'],
+            y=mc_df['Market_Cap_Cat'],
+            orientation='h',
+            text = [f"{val:.2f}%" for val in mc_df['Sort_Val']],
+            textposition='outside',
+            cliponaxis=False,
+            name="Market Cap"),
+        row=2, col=1
     )
     fig.update_layout(
         template='plotly_dark',
         showlegend=False,
-        height=400,
+        font=dict(size=14),
+        height=800,
+        bargap=0.2,
+        margin=dict(l=150),
         hovermode=False
     )
+    '''Configure axis ranges so they don't get cutoff'''
+    fig.update_xaxes(range=[0, sector_df['Sort_Val'].max() * 1.2], row=1, col=1)
+    fig.update_xaxes(range=[0, geo_df['Sort_Val'].max() * 1.2], row=1, col=2)
+    fig.update_xaxes(range=[0, mc_df['Sort_Val'].max() * 1.2], row=2, col=1)
+
+    fig.update_xaxes(
+        visible = False
+    )
+    fig.update_yaxes(tickfont=dict(size=14))
     return fig
 
 

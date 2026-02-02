@@ -285,7 +285,7 @@ def indices_dict():
         'Russell 2000': '^RUT',
         'FTSE 100': '^FTSE',
         'Euro Stoxx 50': '^STOXX50E',
-        'Hang Seng Index': '^HSI',
+        'HSI': '^HSI',
         'Nikkei 225': '^N225',
         'STI': '^STI'
     }
