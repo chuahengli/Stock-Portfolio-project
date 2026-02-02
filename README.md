@@ -1,7 +1,9 @@
 # 📈Moomoo Portfolio Tracker & Analyzer
 
 A tool that interfaces with the **Moomoo OpenD gateway** to store portfolio data into SQLite database and display a dashboard using **Streamlit**. This project is designed to automatically track daily portfolio value, positions, cash flow, and historical orders to track Time-Weighted Returns.
-<img width="1267" height="701" alt="image" src="https://github.com/user-attachments/assets/19b0c55f-c68b-412c-8e07-155af9e9be7c" />
+
+<img width="905" height="455" alt="image" src="https://github.com/user-attachments/assets/42cd95b5-abdc-4465-b3d9-4fe5533dfd5c" />
+
 ## ✨ Features
 **Real-time Monitoring:** Dashboard refreshes every 10 seconds
 **Historical Performance:** Tracks daily snapshots of portfolio in database
