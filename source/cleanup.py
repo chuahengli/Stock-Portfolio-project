@@ -122,6 +122,8 @@ def update_portfolio_percentage(pos: pd.DataFrame, total_assets: float) -> None:
         )
 
 def cleanup_historical_orders(historical_orders:pd.DataFrame):
+    if historical_orders is None or historical_orders.empty:
+        return pd.DataFrame(columns=['Symbol', 'Name', 'Market', 'Buy_Sell', 'Quantity', 'Order_ID', 'Current_Price', 'Currency', 'date_time'])
     historical_orders = historical_orders.loc[historical_orders['order_status'] == 'FILLED_ALL', 
                                           ['code', 'stock_name','order_market', 'trd_side','order_id','qty', 'price','currency','updated_time']]
     historical_orders.rename(columns={'code': 'Symbol',
@@ -137,7 +139,7 @@ def cleanup_historical_orders(historical_orders:pd.DataFrame):
     return historical_orders
 
 def cleanup_cashflow(cashflow:pd.DataFrame):
-    if cashflow.empty:
+    if cashflow is None or cashflow.empty:
         return pd.DataFrame()
     cashflow_filter = ['cashflow_id','clearing_date','currency','cashflow_type','cashflow_direction','cashflow_amount','cashflow_remark']
     cashflow = cashflow.loc[:, cashflow_filter]
