@@ -100,7 +100,7 @@ def render_live():
     # --- Top Metrics Row ---
     snapshot_df = portfolio_snapshots_df.loc[portfolio_snapshots_df['date'] == latest_date.strftime('%Y-%m-%d')]
     
-    prev_snapshot_df = portfolio_snapshots_df.loc[portfolio_snapshots_df['date'] == previous_date.strftime('%Y-%m-%d')]
+    prev_snapshot_df = portfolio_snapshots_df.loc[portfolio_snapshots_df['date'] < latest_date.strftime('%Y-%m-%d')].tail(1)
 
     st.markdown("""
     <style>
