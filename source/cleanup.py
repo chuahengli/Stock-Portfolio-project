@@ -67,6 +67,8 @@ def cleanup_positions(positions:pd.DataFrame):
                             'pl_val':'P_L',
                             'today_pl_val':"Today_s_P_L",
                             'currency':'Currency'}, inplace=True)
+    # Remove rows where Market_Value is 0
+    positions = positions[positions['Market_Value'] != 0]
     # Renamed Symbol to exclude XX.AMZN...f
     positions['Symbol'] = positions['Symbol'].apply(extract_ticker)
     return positions

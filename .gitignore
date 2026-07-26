@@ -11,6 +11,10 @@ db/
 # Moomoo OpenD
 # Ignore the actual config file containing credentials
 **/OpenD.xml
+# Ignore the entire OpenD runtime folder (large binaries, kept on host)
+moomoo_OpenD_9.6.5618_Windows/
+# But keep the example template (no credentials, safe to version)
+!OpenD.example.xml
 
 # Jupyter Notebooks
 *.ipynb
@@ -19,4 +23,3 @@ db/
 # Configuration for Windows Task Scheduler
 run_daily.bat
 daily_log.txt
-
