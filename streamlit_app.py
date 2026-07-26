@@ -2,8 +2,6 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 from datetime import datetime, date, timedelta
-import matplotlib.pyplot as plt
-import mplcyberpunk
 import atexit
 import plotly.express as px
 
