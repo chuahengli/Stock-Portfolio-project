@@ -6,9 +6,15 @@ from datetime import datetime
 # Load local .env first (project-level settings like START_DATE)
 dotenv.load_dotenv()
 
-# Load secure credentials from user's .ssh folder (Windows host, outside Docker mount)
-# The container can't reach C:\Users\hengl\.ssh\, so this is a silent no-op in Docker.
-_SECRET_ENV = Path("C:/Users/hengl/.ssh/moomoo_creds.env")
+# Load secure credentials from a .env file stored outside the project tree.
+# Override with MOOMOO_SECRET_ENV env var (set in your project-level .env),
+# or it defaults to a convention path.
+# Inside a Docker sandbox, the path won't exist — safe silent no-op.
+_SECRET_ENV_PATH = os.getenv(
+    "MOOMOO_SECRET_ENV",
+    "C:/Users/<you>/.ssh/moomoo_creds.env",
+)
+_SECRET_ENV = Path(_SECRET_ENV_PATH)
 if _SECRET_ENV.exists():
     dotenv.load_dotenv(_SECRET_ENV, override=True)
 

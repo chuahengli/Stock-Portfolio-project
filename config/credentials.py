@@ -1,8 +1,9 @@
 """
 Credential loader for moomoo OpenD.
 
-Loads sensitive credentials from a .env file stored outside the Docker
-sandbox (C:\\Users\\hengl\\.ssh\\moomoo_creds.env) and generates the
+Loads sensitive credentials from a .env file stored outside the project
+tree (configured via MOOMOO_SECRET_ENV env var, defaults to
+C:\\Users\\<you>\\.ssh\\moomoo_creds.env) and generates the
 real OpenD.xml from a template at runtime.
 
 Inside the Docker container (Hermes agent), this path doesn't exist,
@@ -17,8 +18,8 @@ from config import settings
 def load_opend_credentials() -> dict | None:
     """Load moomoo OpenD credentials from environment variables.
 
-    These are set by the secure .env at C:\\Users\\hengl\\.ssh\\moomoo_creds.env
-    which settings.py loads at import time. Returns None if not available.
+    These are set by the secure .env (MOOMOO_SECRET_ENV) which
+    settings.py loads at import time. Returns None if not available.
     """
     account = os.getenv("MOOMOO_LOGIN_ACCOUNT")
     pwd = os.getenv("MOOMOO_LOGIN_PWD")
