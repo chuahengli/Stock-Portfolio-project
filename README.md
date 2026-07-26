@@ -1,120 +1,122 @@
-# 📈Moomoo Portfolio Tracker & Analyzer
+# 📈 Moomoo Portfolio Tracker & Analyzer
 
-A tool that interfaces with the **Moomoo OpenD gateway** to store portfolio data into local SQLite database and display a dashboard using **Streamlit**. This project is designed to automatically track daily portfolio value, positions, cash flow, and historical orders to track Time-Weighted Returns.
-
-<img width="905" height="455" alt="image" src="https://github.com/user-attachments/assets/42cd95b5-abdc-4465-b3d9-4fe5533dfd5c" />
+A tool that interfaces with the **Moomoo OpenD gateway** to store portfolio data into a local SQLite database and display a dashboard using **Streamlit**. This project is designed to automatically track daily portfolio value, positions, cash flow, and historical orders to calculate Time-Weighted Returns.
 
 ## ✨ Features
-**Real-time Monitoring:** Dashboard refreshes every 10 seconds
 
-**Historical Performance:** Tracks daily snapshots of portfolio in database
-
-**Visualisation:** Displays portfolio metrics to analyse and understand portfolio allocation
-
-**Dashboard**: Streamlit dashboard with interactive plotly visualisations
+- **Real-time Monitoring:** Dashboard auto-refreshes every 10 seconds
+- **Historical Performance:** Tracks daily snapshots of portfolio in database
+- **Visualisation:** Plotly-based interactive dashboard for portfolio metrics and allocation
+- **Secure Credential Isolation:** Credentials live outside the project tree — safe for AI-assisted development environments
 
 ## 🛠️ Prerequisites
 
 Before running this project, you need the following:
 
-1.  **Python 3.10+**
-2.  **Moomoo Account**
+1. **Python 3.10+**
+2. **Moomoo Account** with OpenD API access
+3. **RSA Key Pair** — generated via [Moomoo's Protocol Encryption Process](https://openapi.moomoo.com/moomoo-api-doc/en/qa/other.html#1479)
 
 ## 🚀 Installation & Setup
 
 ### 1. Clone the Repository
+
 ```bash
 git clone https://github.com/chuahengli/Stock-Portfolio-project.git
 ```
-### 2. OpenD Configuration (`OpenD.xml`)
-Look for the OpenD folder"moomoo_OpenD_9.6.5618_Windows" to configure the `OpenD.xml` file:
-1. Rename OpenD.example.xml from this repo to OpenD.xml
-2.  Set `YOUR_LOGIN_HERE` to your Moomoo login.
-3.  Set `YOUR_PASSWORD_HERE` to your password.
-4.  Set `RSA__KEY_FILEPATH_HERE` to the absolute path of your generated private key (see below).
-```bash
-		<!-- Login account -->
-		<!-- 登录账号可以是用户ID，手机号，邮箱，其中手机号格式为：+86 13800138000 -->
-		<!-- The login account can be user ID, phone number, or email. The phone number format is: +86 13800138000 -->
-		<login_account>YOUR_LOGIN_HERE</login_account>
-		<!-- 登录密码32位MD5加密16进制 -->
-		<!-- Login password, 32-bit MD5 encrypted hexadecimal --> 
-		<!-- <login_pwd_md5>6e55f158a827b1a1c4321a245aaaad88</login_pwd_md5> -->
-		<!-- 登录密码明文，密码密文存在情况下只使用密文 -->
-		<!-- Plain text of login password. When cypher text exists, the cypher text will be used. --> 
-		<login_pwd>YOUR_PASSWORD_HERE</login_pwd>
-		<!-- mo o mo o语言，en：英文，chs：简体中文 -->
-		<!-- moomoo OpenD language. en: English, chs: Simplified Chinese -->
-		<lang>en</lang>
-	<!-- 进阶参数 -->
-	<!-- Advanced parameters -->
-		<!-- moomoo OpenD日志等级，no, debug, info, warning, error, fatal --> 
-		<!-- moomoo OpenD log level: no, debug, info, warning, error, fatal --> 
-		<log_level>info</log_level>
-		<!-- moomoo OpenD日志路径，指定生成日志的路径，不设置时使用默认路径 --> 
-		<!-- moomoo OpenD Log path, Specify the path to generate logs, Use default path if not set --> 
-		<!-- <log_path>D:\log</log_path> -->
-		<!-- API推送协议格式，0：pb, 1：json -->
-		<!-- API push protocol format. 0: pb, 1: json -->
-		<push_proto_type>0</push_proto_type>
-		<!-- API订阅数据推送频率控制，单位毫秒，目前不包括K线和分时，不设置则不限制频率-->
-		<!-- Data Push Frequency, in milliseconds. Candlesticks and timeframes are not included. If not set, the frequency will be unlimited. -->
-		<!-- <qot_push_frequency>1000</qot_push_frequency> -->
-		<!-- Telnet监听地址,不填默认127.0.0.1 -->
-		<!-- Telnet listening address. 127.0.0.1 by default -->
-		<!-- <telnet_ip>127.0.0.1</telnet_ip> -->
-		<!-- Telnet监听端口 -->
-		<!-- Telnet listening port -->
-		<!-- <telnet_port>22222</telnet_port> -->
-		<!-- API协议加密私钥文件路径,不设置则不加密 -->
-		<!-- File path for private key for API protocol enctyption. If not set, it will not be encrypted. -->
-		<rsa_private_key>RSA__KEY_FILEPATH_HERE</rsa_private_key>
-```
-### 3. RSA Key Generation
-For security, this project uses RSA encryption.
-1.  Generate a private/public key pair by following [Moomoo's Protocol Encryption Process](https://openapi.moomoo.com/moomoo-api-doc/en/qa/other.html#1479)
-3.  Copy and paste the private key into a text file on your local machine.
-4.  Enter the abosolute file path of your text file in `RSA__KEY_FILEPATH_HERE` as above in OpenD.xml
 
-### 4. .env configuration(`.env`)
-1. Rename .env.example from this repo to .env
-2. Set `KEY_PATH` to the absolute file path of your RSA key .txt file.
-3. Set `START_DATE` to the date you opened your Moomoo account (YYYY-MM-DD) as a string.
+### 2. Set Up the Moomoo OpenD Gateway
+
+The moomoo OpenD gateway (`OpenD.exe`) is a Windows binary that logs into your moomoo account and exposes a local API. The OpenD folder is **not** stored in the project directory — it lives in a secure location on your host machine to keep credentials isolated.
+
+1. Move the `moomoo_OpenD_9.6.5618_Windows` folder to:
+   ```
+   C:\Users\<you>\.ssh\moomoo_OpenD_9.6.5618_Windows\
+   ```
+2. The `OpenD.example.xml` template at the project root is used by `config/credentials.py` to generate the real `OpenD.xml` at runtime
+3. The XML will be populated with your credentials from the `.env` file at runtime
+
+### 3. RSA Key Generation
+
+1. Generate a private/public key pair by following [Moomoo's Protocol Encryption Process](https://openapi.moomoo.com/moomoo-api-doc/en/qa/other.html#1479)
+2. Save the private key to a text file (e.g. `C:\Users\<you>\.ssh\moomoo_api_private_key.txt`)
+3. Reference this file path in your `.env` (see below)
+
+### 4. Configure `.env`
+
+1. Rename `.env.example` → `.env`
+2. Fill in your credentials:
+
 ```bash
-KEY_PATH=YOUR_RSA_KEY_PATH_HERE.txt
+# Path to your RSA private key file
+MOOMOO_RSA_KEY=C:\Users\YourName\.ssh\moomoo_api_private_key.txt
+
+# Your moomoo login account (user ID, phone number, or email)
+MOOMOO_LOGIN_ACCOUNT=102089581
+
+# Your moomoo login password (plain text — used to generate OpenD.xml at runtime)
+MOOMOO_LOGIN_PWD=your_password
+
+# Path to the moomoo_OpenD folder
+OPEND_DIR=C:\Users\YourName\.ssh\moomoo_OpenD_9.6.5618_Windows
+
+# Date you opened your Moomoo account (YYYY-MM-DD)
 START_DATE="2023-08-07"
 ```
-### 6. Install Dependencies
-This project uses `pipenv` for dependency management. Run this line
+
+> **Why this structure?**
+> - The `.env` file is in `.gitignore` and never committed
+> - The OpenD folder (with `OpenD.xml`) lives outside the project tree
+> - At runtime, `config/credentials.py` reads the `.env`, generates the real `OpenD.xml` from the template, then starts OpenD — so credentials never sit in the project directory
+
+### 5. Install Dependencies
+
+This project uses `pipenv` for dependency management:
+
 ```bash
 pip install pipenv
 pipenv install
 ```
+
 ## 📂 Project Structure
 
 ```text
 .
 ├── config/
-│   └── settings.py       # Paths and configuration constants
-├── db/                   # Database storage (Ignored by Git)
+│   ├── __init__.py          # (empty)
+│   ├── settings.py           # Paths, configuration constants, env loading
+│   └── credentials.py        # Loads secure credentials, generates OpenD.xml
+├── db/                       # SQLite database storage (gitignored)
 ├── source/
-│   ├── cleanup.py        # Data transformation and cleaning logic
-│   ├── db.py             # SQLite database interactions
-│   ├── moomoo_api.py     # Moomoo OpenD API interface
-│   └── dashboard.py      # Plotly/pandas visualization logic
-├── main.py               # Entry point
-├── streamlit_app.py      # Interactive Web UI
-├── Pipfile               # Dependency definitions
-└── README.md             
+│   ├── cleanup.py            # Data transformation and cleaning logic
+│   ├── db.py                 # SQLite database interactions
+│   ├── moomoo_api.py         # Moomoo OpenD API interface
+│   └── dashboard.py          # Plotly/pandas visualization logic
+├── main.py                   # Entry point — fetch API data → clean → store to DB
+├── streamlit_app.py          # Interactive Streamlit Web UI
+├── OpenD.example.xml         # Template to generate credentials-bearing OpenD.xml
+├── Pipfile                   # Dependency definitions (pipenv)
+├── .env.example              # Template for credential configuration
+├── .gitignore                # Prevents leakage of secrets, DB, runtime binaries
+└── README.md
 ```
+
 ## 📊 Usage
-1. Initialize/Update Database:
-Run the main script to fetch historical cashflow data and today's snapshot.
-Depending on how old the account is, obtaining account cashflow historically **may take a while**. Otherwise, after initialization, it should only take a few seconds.
+
+### Initialize / Update Database
+
+Run the main script to fetch historical cashflow data and today's snapshot:
+
 ```bash
 pipenv run python main.py
 ```
-2. Launch Dashboard:
+
+On first run this fetches all historical data since `START_DATE`. Subsequent runs update only the last 30 days.
+
+### Launch Dashboard
+
 ```bash
-streamlit run streamlit_app.py
+pipenv run streamlit run streamlit_app.py
 ```
+
+The dashboard auto-refreshes every 10 seconds in Live Mode. Toggle it off to freeze the view.

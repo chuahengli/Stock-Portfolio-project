@@ -370,6 +370,7 @@ def plt_performance_comparison(percent_df: pd.DataFrame):
 # Modify positions table to add the most information, to be filtered in other functions for displaying graphs and tables
 def display_pos(df: pd.DataFrame):
     pos_df = df.copy()
+    pos_df = pos_df[pos_df['Market_Value'] != 0]
     # Add column is option or not
     option_pattern = r'[A-Z]+\d{6}[CP]\d+'
     pos_df['Is_Option'] = pos_df['Symbol'].str.contains(option_pattern, regex=True)

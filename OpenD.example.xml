@@ -1,4 +1,4 @@
-﻿<moomoo_opend>
+<moomoo_opend>
 	<!-- 基础参数 -->
 	<!-- Basic parameters -->
 		<!-- 协议监听地址,不填默认127.0.0.1 -->
@@ -48,14 +48,12 @@
 		<!-- Whether to receive the price reminder push. 0: not receive, 1: receive -->
 		<price_reminder_push>1</price_reminder_push>
 		<!-- 被踢后是否自动抢权限，0：否，1：是 -->
-		<!-- 开启该选项后，要想在其他终端上获取行情权限需要在10秒连续踢moomoo OpenD两次行情权限（终端登录算一次） -->
 		<!-- Whether to automatically grab highest quote right after being kicked, 0: No, 1: Yes -->
-		<!-- When this parameter is set as 1, if you want to get highest quote right on APP, you need to kick moomoo OpenD twice in 10 seconds (terminal login counts once) -->
 		<auto_hold_quote_right>1</auto_hold_quote_right>
 		<!-- 指定期货交易 API 时区，期货账户调用交易 API 时，涉及的时间按照此时区规则。期货交易必须配置此字段 -->
+		<!-- The time zone of futures trading API. When using trading API with futures account, the time involved is in accordance with the time zone rules. You must set this parameter when trading futures -->
 		<!-- UTC：0时区，UTC+1：东一区，UTC+2：东二区，......，UTC+11：东十一区，UTC+12：东十二区，UTC-11：西十一区，......，UTC-1：西一区 -->
 		<!-- The time zone of futures trading API. When using trading API with futures account, the time involved is in accordance with the time zone rules. You must set this parameter when trading futures -->
-		<!-- UTC: 0 time zone, UTC+1: East 1st zone, UTC+2: East 2nd zone, ..., UTC+11: East 11th zone, UTC+12: East 12th zone, UTC-11: West 11th zone,..., UTC-1: West 1st zone -->
 		<future_trade_api_time_zone>UTC+8</future_trade_api_time_zone>
 	<!-- WebSocket 专用参数 -->
 	<!-- Specific parameters for WebSocket -->
@@ -69,7 +67,7 @@
 		<!-- WebSocket authentication key ciphertext, 32-bit MD5 encrypted hexadecimal -->
 		<!-- <websocket_key_md5>14e1b600b1fd579f47433b88e8d85291</websocket_key_md5> -->
 		<!-- WebSocket证书私钥文件路径，不配置则不启用SSL，需要和证书同时配置 -->
-		<!-- WebSocket private key file path. SSL will not work if not set. WebSocket certificate and private key need to be set at the same time -->	
+		<!-- WebSocket private key file path. SSL will not work if not set. WebSocket certificate and private key need to be set at the same time -->
 		<!-- <websocket_private_key>D:\key</websocket_private_key> -->
 		<!-- WebSocket证书文件路径，不配置则不启用SSL，需要和私钥同时配置 -->
 		<!-- WebSocket certificate file path. SSL will not work if not set. WebSocket certificate and private key need to be set at the same time -->
@@ -82,7 +80,7 @@
 		<!-- When this parameter is set as 1, we will prevent you from placing orders which might mark you as a Pattern Day Trader(PDT). The Protection can not guarentee that you won't be marked as a PDT. If you are marked as a PDT, you will not be allowed to open new positions until your equity is above $25000.-->
 		<pdt_protection>1</pdt_protection>
 		<!-- 是否开启 日内交易保证金追缴预警 的功能, 0：否，1：是 -->	
-		<!-- 开启功能后，我们会在您即将开仓下单超出剩余日内交易购买力前阻止您的下单。提醒您当前开仓订单的市值大于您的剩余日内交易购买力，若您在今日平仓当前标的，您将会收到日内交易保证金追缴通知（Day-Trading Call），只能通过存入资金才能解除。 -->	
+		<!-- 开启功能后，我们会在您即将开仓下单超出剩余日内交易购买力前阻止您的下单。提醒您当前开仓订单的市值大于您的剩余日内交易购买力，若您在今日平仓当前标的，您将会收到日内交易保证金追缴通知（Day-Trading Call），只能通过存入资金才能解除。 -->
 		<!-- Whether to turn on the Day-Trading Call Warning, 0: No, 1: Yes  -->
 		<!-- When this parameter is set as 1, we will prevent you from placing orders which might exceed your remaining day-trading buying power. We will alert you that you are placing orders that exceed your remaining day-trading buying power. If you close the positions today, you will receive a Day-Trading Call. The DT Call can ONLY be met by depositing funds in the full amount of the call.-->
 		<dtcall_confirmation>1</dtcall_confirmation>

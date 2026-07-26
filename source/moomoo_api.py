@@ -1,11 +1,11 @@
 import moomoo as moomoo
 from moomoo.trade.open_trade_context import OpenSecTradeContext
 from config import settings
+from config.credentials import generate_opend_xml
 
 import os
 import time
 import subprocess
-from dotenv import load_dotenv
 from datetime import datetime,date,timedelta
 import pandas as pd
 from typing import Optional, Dict, List
@@ -38,6 +38,9 @@ def ensure_opend_is_ready():
     # If port is closed but process exists, it's a ghost. Kill it.
     stop_opend()
     
+    # Generate OpenD.xml from credentials (no-op inside Docker, no creds found)
+    generate_opend_xml()
+    
     print("Starting fresh OpenD instance...")
     opend_path = str(settings.OPEND_PATH)
     try:
@@ -59,9 +62,13 @@ def ensure_opend_is_ready():
 
 
 def configure_moomoo_api():
-    # Get the RSA key path from environment variables
-    load_dotenv(settings.BASE_DIR / ".env")
-    key_path = os.getenv("KEY_PATH")
+    # Get the RSA key path from environment variables (set by secure .env)
+    key_path = os.getenv("MOOMOO_RSA_KEY")
+    if not key_path:
+        # Fallback: try the old KEY_PATH variable for backward compat
+        key_path = os.getenv("KEY_PATH")
+    if not key_path:
+        print("Warning: MOOMOO_RSA_KEY not set — API encryption may fail.")
     # 1. Configure the RSA private key file globally
     moomoo.SysConfig.set_init_rsa_file(key_path)
     # 2. Create the trade context and enable encryption
