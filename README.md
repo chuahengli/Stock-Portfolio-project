@@ -52,7 +52,7 @@ The moomoo OpenD gateway (`OpenD.exe`) is a Windows binary that logs into your m
 MOOMOO_RSA_KEY=C:\Users\YourName\.ssh\moomoo_api_private_key.txt
 
 # Your moomoo login account (user ID, phone number, or email)
-MOOMOO_LOGIN_ACCOUNT=102089581
+MOOMOO_LOGIN_ACCOUNT=YOUR_LOGIN_ACCOUNT_HERE
 
 # Your moomoo login password (plain text — used to generate OpenD.xml at runtime)
 MOOMOO_LOGIN_PWD=your_password
