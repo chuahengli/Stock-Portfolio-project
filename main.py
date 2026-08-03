@@ -6,6 +6,19 @@ import os
 import subprocess
 import pandas as pd
 
+
+def _summarize_frame(name, df, extra=""):
+    """Log a concise summary of a dataframe instead of dumping its full contents
+    (keeps daily_log.txt small -- the file used to grow to tens of MB)."""
+    if df is None:
+        print(f"{name}: None")
+    elif hasattr(df, "shape"):
+        print(f"{name}: {df.shape[0]} row(s) x {df.shape[1]} col(s){extra}")
+    else:
+        print(f"{name}: present{extra}")
+
+
+
 '''
 TESTING PURPOSES ONLY
 
@@ -32,10 +45,10 @@ def get_api_data(current_date: datetime, end_date: datetime, keep_opend_alive: b
     except Exception as e:
         print(f"API Error: {e}")
     
-    print("Acc_info: \n", acc_info)
-    print("Positions: \n", positions)
-    print("Cashflow: \n", cashflow)
-    print("Historical Orders: \n", historical_orders)
+    _summarize_frame("Acc_info", acc_info)
+    _summarize_frame("Positions", positions)
+    _summarize_frame("Cashflow", cashflow)
+    _summarize_frame("Historical Orders", historical_orders)
 
     return acc_info, positions, cashflow, historical_orders
 
@@ -48,10 +61,10 @@ def cleanup_data(acc_info: pd.DataFrame, positions: pd.DataFrame, cashflow: pd.D
     historical_orders = cleanup.cleanup_historical_orders(historical_orders)
     cashflow = cleanup.cleanup_cashflow(cashflow)
 
-    print("Acc_info: \n", acc_info)
-    print("Positions: \n", positions)
-    print("Cashflow: \n", cashflow)
-    print("Historical Orders: \n", historical_orders)
+    _summarize_frame("Acc_info", acc_info)
+    _summarize_frame("Positions", positions)
+    _summarize_frame("Cashflow", cashflow)
+    _summarize_frame("Historical Orders", historical_orders)
     '''
     print ("Total Assets: ",cleanup.get_total_assets(acc_info))
     print ("Securities assets: ",cleanup.get_securities_assets(acc_info))
@@ -62,8 +75,8 @@ def cleanup_data(acc_info: pd.DataFrame, positions: pd.DataFrame, cashflow: pd.D
     
     # Split shares and options positions into separate dataframes
     shares, options = cleanup.separate_assets(positions)
-    print("Shares Dataframe: \n", shares)
-    print("Options Dataframe: \n", options)
+    _summarize_frame("Shares Dataframe", shares)
+    _summarize_frame("Options Dataframe", options)
     # Calculate Market Value of Shares and Options
     shares_mv = cleanup.sum_of_mv(shares)
     options_mv = cleanup.sum_of_mv(options)
@@ -84,8 +97,8 @@ def cleanup_data(acc_info: pd.DataFrame, positions: pd.DataFrame, cashflow: pd.D
     # Set up positions dataframe
     positions_df = cleanup.positions_table(positions, date_str)
     
-    print("snapshot dataframe: \n", snapshot_df)
-    print("positions dataframe: \n", positions_df)
+    _summarize_frame("snapshot dataframe", snapshot_df)
+    _summarize_frame("positions dataframe", positions_df)
 
     return snapshot_df, positions_df, cashflow, historical_orders
 
@@ -95,6 +108,7 @@ def update_db(snapshot_df: pd.DataFrame, positions_df: pd.DataFrame, cashflow: p
     db.init_db()
     db.insert_dataframe(positions_df, 'positions')
     db.insert_dataframe(historical_orders, 'historical_orders')
+    db.sync_transactions()
     # Check if cashflow dataframe is empty
     if cashflow.empty:
         print("Skipping cashflow database update due to empty results.")

@@ -11,6 +11,9 @@ A tool that interfaces with the **Moomoo OpenD gateway** to store portfolio data
 - **Time-Weighted Return from inception:** TWR anchors to the earliest recorded snapshot (your tracking start date), not a hardcoded value
 - **Dividend & Coupon attribution:** cash flows are classified as *external capital* (deposits/withdrawals → adjust NAV units) vs *investment income* (dividends/coupons/taxes → count toward return), so income is no longer mislabelled as capital or silently dropped. Cumulative income is charted on the dashboard
 - **Unit tests:** `tests/` covers cash-flow classification and TWR inception logic (`python -m pytest tests/ -q`)
+- **Date-stamped realized P/L:** the `net_p_l` table now carries a `date`, so realized P/L snapshots are preserved day-to-day instead of being overwritten; the dashboard shows the latest date
+- **Buy/Sell audit ledger:** a `transactions` table (built from `historical_orders` each run) records every fill with multiplier-aware, sign-conventioned `Gross_Amount`; surfaced in a "Trade Ledger" dashboard tab
+- **Bounded daily log:** `main.py` now logs concise summaries instead of full dataframes, and `run_daily.bat` auto-rotates `daily_log.txt` (keeps one previous archive) when it exceeds 10 MB
 
 ## 🛠️ Prerequisites
 

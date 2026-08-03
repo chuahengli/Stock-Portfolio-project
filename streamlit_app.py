@@ -137,7 +137,7 @@ def render_live():
         #col5.metric("NAV", f"{col5_metric:.4f}",delta=col5_delta)
         col6.metric("Last Updated", current_time)
     # --- Tabs for different views ---
-    overview, positions, p_l_analysis = st.tabs(["📊 Overview", "📋 Positions", "💰 P/L Analysis"])
+    overview, positions, p_l_analysis, ledger = st.tabs(["📊 Overview", "📋 Positions", "💰 P/L Analysis", "Trade Ledger"])
 
     with overview:
         # col_left, col_right = st.columns(2)
@@ -218,11 +218,11 @@ def render_live():
     
 
         # --- Dividend / Coupon Income Attribution ---
-        st.markdown("#### \ud83d\udcb0 Dividend / Coupon Income")
+        st.markdown("#### Dividend / Coupon Income")
         _income_df = db.income_by_date()
         inc_chart, inc_metric = st.columns([4, 1])
         with inc_chart:
-            st.plotly_chart(dashboard.plot_income_trend(_income_df), use_container_width=True)
+            st.plotly_chart(dashboard.plot_income_trend(_income_df), width='stretch')
         with inc_metric:
             if not _income_df.empty:
                 total_inc = _income_df['Cumulative'].iloc[-1]
@@ -270,6 +270,40 @@ def render_live():
                                         'Total_Net_P_L': st.column_config.NumberColumn('Net P/L')
                                         }
                         )
+
+    with ledger:
+        st.subheader("Trade Ledger (Buy/Sell Audit)")
+        ledger_data = dashboard.trade_ledger()
+        if ledger_data.empty:
+            st.info("No transaction records yet. Run a daily update to build the ledger.")
+        else:
+            mkt_opts = ["All"] + sorted(ledger_data["Market"].dropna().unique().tolist())
+            sel_mkt = st.selectbox("Market", mkt_opts, key="ledger_mkt")
+            view = ledger_data if sel_mkt == "All" else ledger_data[ledger_data["Market"] == sel_mkt]
+            total_cf = view["Gross_Amount"].sum()
+            st.metric("Net Realised Cash Flow (as-traded)", f"{total_cf:+,.2f}")
+            st.dataframe(
+                view[["date_time", "Symbol", "Name", "Market", "Buy_Sell",
+                      "Quantity", "Fill_Price", "Multiplier", "Gross_Amount", "Currency"]]
+                .reset_index(drop=True),
+                width='stretch',
+                height=420,
+                column_config={
+                    "date_time": "Date/Time",
+                    "Buy_Sell": "Side",
+                    "Fill_Price": st.column_config.NumberColumn("Fill Price"),
+                    "Multiplier": st.column_config.NumberColumn("Mult"),
+                    "Gross_Amount": st.column_config.NumberColumn("Cash Flow ($)"),
+                },
+            )
+            st.caption(
+                "Signed Cash Flow: SELL / SELL_SHORT = + (cash in), BUY / BUY_BACK = - (cash out). "
+                "Options use the x100 contract multiplier. Amounts are in the as-traded currency (USD/SGD)."
+            )
+            with st.expander("Net Cash Flow by Symbol"):
+                summary = dashboard.ledger_summary(sel_mkt if sel_mkt != "All" else None)
+                if not summary.empty:
+                    st.dataframe(summary, width='stretch')
 
 render_live()  
 persistent_opend()

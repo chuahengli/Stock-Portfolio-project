@@ -149,7 +149,9 @@ def account_cashflow(trade_obj: OpenSecTradeContext, current_date: datetime, end
     return cash_flow_data
     
 def get_historical_orders(trade_obj: OpenSecTradeContext):
-    ret, data = trade_obj.history_order_list_query(start=datetime.combine(settings.START_DATE, datetime.min.time()),end=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+    start = datetime.combine(settings.START_DATE, datetime.min.time()).strftime('%Y-%m-%d %H:%M:%S')
+    end = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    ret, data = trade_obj.history_order_list_query(start=start, end=end)
     if ret == moomoo.RET_OK:
         return data 
     else:
