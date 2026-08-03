@@ -79,7 +79,8 @@ def init_db():
         in_out TEXT,
         Amount NUMERIC,
         Remark TEXT,
-        is_external NUMERIC
+        is_external NUMERIC,
+        is_income NUMERIC
     )
     """
     # Create net_p_l table
@@ -115,6 +116,7 @@ def init_db():
         cursor.execute(cashflow_table)
         cursor.execute(net_p_l_table)
         cursor.execute(benchmark_history_table)
+        _ensure_cashflow_income_column(conn)
 
 def table_empty(table_name:str):
     with db_contextmanager() as conn:
@@ -294,6 +296,64 @@ def indices_dict():
 
 
 
+
+
+
+def _ensure_cashflow_income_column(conn):
+    """Add the is_income column to an existing cashflow table (schema migration)."""
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(cashflow)")]
+    if "is_income" not in cols:
+        conn.execute("ALTER TABLE cashflow ADD COLUMN is_income NUMERIC")
+        print("Migrated: added is_income column to cashflow table.")
+
+
+def reclassify_cashflow():
+    """Recompute is_external / is_income for ALL existing cashflow rows using the
+    current classification rules in cleanup.classify_cashflow.
+
+    Run once to backfill the corrected flags (e.g. old Coupon rows that were
+    mislabelled as external capital flows). Idempotent -- safe to rerun.
+    """
+    from source.cleanup import classify_cashflow
+    with db_contextmanager() as conn:
+        _ensure_cashflow_income_column(conn)
+        rows = conn.execute("SELECT cashflow_id, Type, Remark FROM cashflow").fetchall()
+        for cid, ctype, remark in rows:
+            ext, inc = classify_cashflow(ctype, remark)
+            conn.execute(
+                "UPDATE cashflow SET is_external = ?, is_income = ? WHERE cashflow_id = ?",
+                (1 if ext else 0, 1 if inc else 0, cid),
+            )
+    print(f"Reclassified {len(rows)} cashflow rows.")
+
+
+def get_inception_date():
+    """Return the first (earliest) recorded snapshot date -- the tracking inception.
+
+    This is the natural TWR reference point: performance is measured from when data
+    recording began, regardless of when the account was opened.
+    """
+    df = read_db("SELECT MIN(date) AS min_date FROM portfolio_snapshots")
+    if not df.empty and pd.notna(df.iloc[0]["min_date"]):
+        return datetime.strptime(df.iloc[0]["min_date"], "%Y-%m-%d")
+    return None
+
+
+def income_by_date(to_currency: str = "SGD"):
+    """Aggregate dividend/coupon/interest income per day, converted to to_currency.
+
+    Returns a DataFrame with columns [Date, Amount, Cumulative]. Amount is net income
+    (dividends in, minus withholding tax / fees). Cumulative is the running total.
+    """
+    df = read_db("SELECT Date, Currency, Amount FROM cashflow WHERE is_income = 1")
+    if df.empty:
+        return pd.DataFrame(columns=["Date", "Amount", "Cumulative"])
+    df["Amount"] = df.apply(
+        lambda x: convert_currency(x["Amount"], x["Currency"], to_currency), axis=1
+    )
+    df = df.groupby("Date")["Amount"].sum().reset_index().sort_values("Date").reset_index(drop=True)
+    df["Cumulative"] = df["Amount"].cumsum().round(2)
+    return df
 
 
 def main():

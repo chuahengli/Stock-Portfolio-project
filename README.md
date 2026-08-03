@@ -8,6 +8,9 @@ A tool that interfaces with the **Moomoo OpenD gateway** to store portfolio data
 - **Historical Performance:** Tracks daily snapshots of portfolio in database
 - **Visualisation:** Plotly-based interactive dashboard for portfolio metrics and allocation
 - **Secure Credential Isolation:** Credentials live outside the project tree — safe for AI-assisted development environments
+- **Time-Weighted Return from inception:** TWR anchors to the earliest recorded snapshot (your tracking start date), not a hardcoded value
+- **Dividend & Coupon attribution:** cash flows are classified as *external capital* (deposits/withdrawals → adjust NAV units) vs *investment income* (dividends/coupons/taxes → count toward return), so income is no longer mislabelled as capital or silently dropped. Cumulative income is charted on the dashboard
+- **Unit tests:** `tests/` covers cash-flow classification and TWR inception logic (`python -m pytest tests/ -q`)
 
 ## 🛠️ Prerequisites
 
