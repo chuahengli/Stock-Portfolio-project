@@ -73,7 +73,8 @@ def plot_asset_allocation(df: pd.DataFrame):
     return fig
 
 def market_p_l_type(market: str):
-    query = f"SELECT * FROM net_p_l"
+    # Only the most recent date-stamped snapshot (historical snapshots are preserved).
+    query = "SELECT * FROM net_p_l WHERE date = (SELECT MAX(date) FROM net_p_l)"
     net_P_L = db.read_db(query)
     
     # Split by market 'US','SG','HK' etc.
@@ -621,6 +622,33 @@ def plot_portfolio_characteristics(pos_df: pd.DataFrame):
     )
     fig.update_yaxes(tickfont=dict(size=14))
     return fig
+
+
+def trade_ledger():
+    """Chronological buy/sell audit ledger from the `transactions` table."""
+    query = (
+        "SELECT date_time, Symbol, Name, Market, Buy_Sell, Quantity, "
+        "Fill_Price, Multiplier, Gross_Amount, Currency "
+        "FROM transactions ORDER BY date_time DESC"
+    )
+    df = db.read_db(query)
+    return df
+
+
+def ledger_summary(market: str = None):
+    """Per-symbol net realised cash flow (SELL proceeds - BUY cost), an audit proxy
+    for realised P/L. Optionally restricted to a single market."""
+    query = (
+        "SELECT Symbol, Market, Currency, SUM(Gross_Amount) AS Net_Cash_Flow "
+        "FROM transactions"
+    )
+    if market:
+        query += f" WHERE Market = '{market}'"
+    query += " GROUP BY Symbol, Market, Currency ORDER BY Net_Cash_Flow"
+    df = db.read_db(query)
+    if not df.empty:
+        df["Net_Cash_Flow"] = df["Net_Cash_Flow"].round(2)
+    return df
 
 
 def plot_income_trend(income_df: pd.DataFrame):

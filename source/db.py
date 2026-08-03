@@ -86,11 +86,28 @@ def init_db():
     # Create net_p_l table
     net_p_l_table = """
     CREATE TABLE IF NOT EXISTS net_p_l (
+        date TEXT,
         Symbol TEXT,
         Market TEXT,
         Currency TEXT,
         Net_P_L NUMERIC,
-        PRIMARY KEY(Symbol, Market, Currency)
+        PRIMARY KEY(date, Symbol, Market, Currency)
+    )
+    """
+    # Buy/Sell audit ledger (derived from historical_orders)
+    transactions_table = """
+    CREATE TABLE IF NOT EXISTS transactions (
+        Order_ID TEXT PRIMARY KEY,
+        date_time TEXT,
+        Symbol TEXT,
+        Name TEXT,
+        Market TEXT,
+        Buy_Sell TEXT,
+        Quantity NUMERIC,
+        Fill_Price NUMERIC,
+        Multiplier NUMERIC,
+        Gross_Amount NUMERIC,
+        Currency TEXT
     )
     """
 
@@ -115,8 +132,10 @@ def init_db():
         cursor.execute(historical_orders_table)
         cursor.execute(cashflow_table)
         cursor.execute(net_p_l_table)
+        cursor.execute(transactions_table)
         cursor.execute(benchmark_history_table)
         _ensure_cashflow_income_column(conn)
+        _migrate_net_p_l(conn)
 
 def table_empty(table_name:str):
     with db_contextmanager() as conn:
@@ -240,6 +259,8 @@ def net_p_l(today_date: datetime):
         net_P_L = historical_orders_p_l
 
     net_P_L = net_P_L.groupby(['Symbol', 'Market', 'Currency'])[['Net_P_L']].sum().reset_index()
+    # Date-stamp the snapshot so P/L history is preserved (not overwritten) day to day.
+    net_P_L['date'] = today_date.strftime('%Y-%m-%d')
     return net_P_L
 
 # Helper to get the latest available date in portfolio_snapshots table
@@ -354,6 +375,84 @@ def income_by_date(to_currency: str = "SGD"):
     df = df.groupby("Date")["Amount"].sum().reset_index().sort_values("Date").reset_index(drop=True)
     df["Cumulative"] = df["Amount"].cumsum().round(2)
     return df
+
+
+
+OPTION_PATTERN = r'[A-Z]+\d{6}[CP]\d+'
+
+
+def _migrate_net_p_l(conn):
+    """Migrate the net_p_l table to include a date column (preserve P/L history).
+
+    SQLite cannot alter a primary key in place, so the table is rebuilt. Existing
+    rows are backfilled with the latest recorded snapshot date -- they are derived
+    (regenerable) data, so nothing of value is lost.
+    """
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(net_p_l)")]
+    if "date" in cols:
+        return
+    latest = conn.execute("SELECT MAX(date) FROM portfolio_snapshots").fetchone()[0]
+    date_col = latest or datetime.now().strftime("%Y-%m-%d")
+    conn.execute("ALTER TABLE net_p_l RENAME TO net_p_l_old")
+    conn.execute(
+        """
+        CREATE TABLE net_p_l (
+            date TEXT,
+            Symbol TEXT,
+            Market TEXT,
+            Currency TEXT,
+            Net_P_L NUMERIC,
+            PRIMARY KEY(date, Symbol, Market, Currency)
+        )
+        """
+    )
+    conn.execute(
+        "INSERT INTO net_p_l (date, Symbol, Market, Currency, Net_P_L) "
+        "SELECT ?, Symbol, Market, Currency, Net_P_L FROM net_p_l_old",
+        (date_col,),
+    )
+    conn.execute("DROP TABLE net_p_l_old")
+    print("Migrated: net_p_l is now date-stamped (realized P/L history preserved).")
+
+
+def option_multiplier(symbol: str) -> int:
+    """Return the contract multiplier: 100 for options, 1 for stocks/ETFs."""
+    return 100 if re.search(OPTION_PATTERN, str(symbol)) else 1
+
+
+def transaction_gross_amount(symbol, side, quantity, fill_price):
+    """Signed, multiplier-aware notional for one fill (pure logic, testable).
+
+    sign: BUY / BUY_BACK = -1 (cash out), SELL / SELL_SHORT = +1 (cash in).
+    multiplier: 100 for options, 1 for stocks/ETFs.
+    """
+    mult = option_multiplier(symbol)
+    sign = -1 if str(side).strip().upper() in ("BUY", "BUY_BACK") else 1
+    return round(quantity * fill_price * mult * sign, 2)
+
+
+def sync_transactions():
+    """(Re)build the buy/sell audit `transactions` ledger from historical_orders.
+
+    Each filled order becomes one row with a multiplier-aware, sign-conventioned
+    Gross_Amount: SELL / SELL_SHORT = + (cash in), BUY / BUY_BACK = - (cash out).
+    Idempotent -- ordered by Order_ID, safe to re-run on every update.
+    """
+    df = read_db("SELECT * FROM historical_orders")
+    if df.empty:
+        print("No historical orders to sync into transactions ledger.")
+        return
+    df = df.copy()
+    df["Multiplier"] = df["Symbol"].apply(option_multiplier)
+    df["Gross_Amount"] = [
+        transaction_gross_amount(s, b, q, p)
+        for s, b, q, p in zip(df["Symbol"], df["Buy_Sell"], df["Quantity"], df["Current_Price"])
+    ]
+    df = df.rename(columns={"Current_Price": "Fill_Price"})
+    df = df[["Order_ID", "date_time", "Symbol", "Name", "Market", "Buy_Sell",
+             "Quantity", "Fill_Price", "Multiplier", "Gross_Amount", "Currency"]]
+    insert_dataframe(df, "transactions")
+    print(f"Synced {len(df)} rows into the transactions (audit) ledger.")
 
 
 def main():
