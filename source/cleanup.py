@@ -140,6 +140,60 @@ def cleanup_historical_orders(historical_orders:pd.DataFrame):
     historical_orders['Symbol'] = historical_orders['Symbol'].apply(extract_ticker)
     return historical_orders
 
+# --- Cash-flow classification for TWR / return attribution ---
+# is_external == True  -> real money moving in/out of the account (deposits/withdrawals).
+#                         These are CAPITAL: they adjust NAV *units*, NOT investment return.
+# is_income    == True  -> dividend / coupon / interest income (net of their taxes & fees).
+#                         These are RETURN: they flow into total_assets -> NAV, and should
+#                         NOT create units.
+# Both False           -> internal transfer / FX conversion / fund subscription-redemption.
+#                         No net effect on NAV or units (wealth stays inside the account).
+
+EXTERNAL_CASHFLOW_TYPES = {
+    'Bank Transfer Deposits',
+    'Bank Transfer Withdrawals',
+    'Money Transfers',
+}
+
+INCOME_CASHFLOW_TYPES = {
+    'Cash Dividend',
+    'Dividend',
+    'Coupon',
+    'Dividend Tax',     # withholding tax reduces net dividend received
+    'ADR Dividend Fee', # fee deducted alongside a dividend
+    'GST',              # goods & services tax on dividend fees
+}
+
+# 'Others' rows are ambiguous -- decide from the remark text.
+INTERNAL_REMARK_HINTS = ('fund', 'subscription', 'redemption')
+INCOME_REMARK_HINTS = ('coupon', 'dividend', 'tax', 'fee')
+
+
+def classify_cashflow(cashflow_type, remark):
+    """Return (is_external, is_income) for a single cash-flow row.
+
+    This is pure logic (no I/O) so it stays unit-testable.
+    """
+    type_s = str(cashflow_type).strip() if cashflow_type is not None else ''
+    remark_s = str(remark).strip() if remark is not None else ''
+    rem_lower = remark_s.lower()
+
+    is_external = type_s in EXTERNAL_CASHFLOW_TYPES
+    is_income = type_s in INCOME_CASHFLOW_TYPES
+
+    # 'Others' is ambiguous -- classify from the remark text.
+    if type_s == 'Others':
+        if any(hint in rem_lower for hint in INCOME_REMARK_HINTS):
+            is_income, is_external = True, False
+        elif any(hint in rem_lower for hint in INTERNAL_REMARK_HINTS):
+            is_income, is_external = False, False
+        else:
+            # Payment / deposit references (PAYNOW, deposit IDs, etc.) -> external capital.
+            is_income, is_external = False, True
+
+    return is_external, is_income
+
+
 def cleanup_cashflow(cashflow:pd.DataFrame):
     if cashflow is None or cashflow.empty:
         return pd.DataFrame()
@@ -152,14 +206,11 @@ def cleanup_cashflow(cashflow:pd.DataFrame):
                             'cashflow_amount':'Amount',
                             'cashflow_remark':'Remark'}, inplace=True)
     cashflow['Amount'] = cashflow['Amount'].round(2)
-    # Define the "Noise" keywords to exclude
-    noise_keywords = ['Dividend', 'Tax', 'Fund']
-    noise_pattern = '|'.join(noise_keywords)
-    # Keep rows where 'Type' is relevant AND 'Remark' does NOT contain noise
-    is_relevant_type = cashflow['Type'].isin(['Others', 'Bank Transfer Withdrawals', 'Bank Transfer Deposits','Coupon'])
-    is_not_noise = ~cashflow['Remark'].str.contains(noise_pattern, case=False, na=False)
-    cashflow['is_external'] = is_relevant_type & is_not_noise
+    classified = cashflow.apply(lambda r: classify_cashflow(r['Type'], r['Remark']), axis=1)
+    cashflow['is_external'] = classified.apply(lambda t: 1 if t[0] else 0)
+    cashflow['is_income'] = classified.apply(lambda t: 1 if t[1] else 0)
     return cashflow
+
 
 def separate_assets(positions:pd.DataFrame):
     # Regex for Option: Root + 6 digits (date) + C/P + 8 digits (strike)

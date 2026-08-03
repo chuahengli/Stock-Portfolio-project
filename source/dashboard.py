@@ -106,17 +106,42 @@ def get_base_ticker(symbol: str, is_opt):
         return re.match(r'^[A-Z]+', symbol).group()
     return symbol 
 
-def get_twr(df: pd.DataFrame, start_date: datetime, end_date: datetime):
-    start_str: str = start_date.strftime('%Y-%m-%d')
-    end_str: str = end_date.strftime('%Y-%m-%d')
+def get_twr(df: pd.DataFrame, start_date: datetime = None, end_date: datetime = None):
+    """Time-Weighted Return between two snapshot dates.
+
+    If start_date is None, it defaults to the earliest snapshot in `df` -- i.e. the
+    tracking inception (when data recording began). This removes the old hardcoded
+    reference date and keeps the measure anchored to real recorded data.
+    """
+    if df is None or df.empty:
+        return "N/A"
+
+    # Resolve start date
+    if start_date is None:
+        start_str = str(pd.to_datetime(df['date']).min().date())
+    elif isinstance(start_date, (date, datetime)):
+        start_str = start_date.strftime('%Y-%m-%d')
+    else:
+        start_str = str(start_date)[:10]
+
+    # Resolve end date
+    if end_date is None:
+        end_str = str(pd.to_datetime(df['date']).max().date())
+    elif isinstance(end_date, (date, datetime)):
+        end_str = end_date.strftime('%Y-%m-%d')
+    else:
+        end_str = str(end_date)[:10]
 
     try:
-        beginning_nav = df.loc[df['date']==start_str,'nav'].values[0]
-        end_nav = df.loc[df['date']==end_str,'nav'].values[0]
+        beginning_nav = df.loc[df['date'] == start_str, 'nav'].values[0]
+        end_nav = df.loc[df['date'] == end_str, 'nav'].values[0]
     except IndexError:
         return "N/A"
 
-    returns = (end_nav-beginning_nav)/beginning_nav 
+    if beginning_nav == 0:
+        return "N/A"
+
+    returns = (end_nav - beginning_nav) / beginning_nav
     twr = f"{returns:.2%}"
     return twr
 
@@ -595,6 +620,30 @@ def plot_portfolio_characteristics(pos_df: pd.DataFrame):
         visible = False
     )
     fig.update_yaxes(tickfont=dict(size=14))
+    return fig
+
+
+def plot_income_trend(income_df: pd.DataFrame):
+    """Area chart of cumulative dividend/coupon income over time (in SGD)."""
+    if income_df is None or income_df.empty:
+        return empty_fig()
+    income_df = income_df.copy()
+    income_df['Date'] = pd.to_datetime(income_df['Date'])
+    fig = px.area(
+        income_df, x='Date', y='Cumulative',
+        template='plotly_dark', height=300,
+    )
+    fig.update_traces(
+        line=dict(width=3, color='#4CAF50'),
+        fillcolor='rgba(76,175,80,0.2)',
+        hovertemplate="Cumulative Income (SGD): $%{y:,.2f}<extra></extra>",
+    )
+    fig.update_layout(
+        showlegend=False,
+        hovermode='x unified',
+        yaxis=dict(title="", automargin=True, showgrid=False),
+        xaxis=dict(title="", automargin=True, showgrid=False),
+    )
     return fig
 
 

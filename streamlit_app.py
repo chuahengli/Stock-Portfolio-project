@@ -145,7 +145,8 @@ def render_live():
         
         #st.subheader("Asset Allocation",text_alignment = 'center')
         # Get allocation data for the specific date
-        returns_str = dashboard.get_twr(portfolio_snapshots_df, datetime.strptime('2026-01-12', '%Y-%m-%d'), latest_date)
+        inception_date = db.get_inception_date()
+        returns_str = dashboard.get_twr(portfolio_snapshots_df, inception_date, latest_date)
         
         alloc_df = snapshot_df.loc[:,['stocks','options','cash']]
         total_assets = alloc_df.sum(axis=1).values[0]
@@ -215,6 +216,22 @@ def render_live():
 
     
     
+
+        # --- Dividend / Coupon Income Attribution ---
+        st.markdown("#### \ud83d\udcb0 Dividend / Coupon Income")
+        _income_df = db.income_by_date()
+        inc_chart, inc_metric = st.columns([4, 1])
+        with inc_chart:
+            st.plotly_chart(dashboard.plot_income_trend(_income_df), use_container_width=True)
+        with inc_metric:
+            if not _income_df.empty:
+                total_inc = _income_df['Cumulative'].iloc[-1]
+                last_inc = _income_df['Amount'].iloc[-1]
+                st.metric("Net Income (cumulative, SGD)", f"${total_inc:,.2f}")
+                st.metric("Latest (SGD)", f"${last_inc:,.2f}")
+            else:
+                st.info("No dividend/coupon income recorded yet.")
+        st.divider()
 
     with positions:
         st.subheader(f"Positions as of {latest_date.strftime('%b %d, %Y')}")
