@@ -1,0 +1,60 @@
+relationship 3a85bec8-63dc-43f8-bf55-e0d474839e05
+	joinOnDateBehavior: datePartOnly
+	fromColumn: dim_date.Date
+	toColumn: LocalDateTable_7a4eb720-35fc-4e47-b6d1-c1dd59e7b686.Date
+
+relationship 410c97f3-0645-4380-836f-fa69a06159c7
+	joinOnDateBehavior: datePartOnly
+	fromColumn: fact_benchmark.Date
+	toColumn: LocalDateTable_1549ae1c-04aa-47e2-a769-243d20536825.Date
+
+relationship 4186cd90-448b-487e-9709-332fced7be7d
+	joinOnDateBehavior: datePartOnly
+	fromColumn: fact_cashflow.Date
+	toColumn: LocalDateTable_082e87b1-9ceb-4d9c-9e73-6ca5f28ccd48.Date
+
+relationship db3fd612-3c58-4f86-b34a-8f4f8c06327a
+	joinOnDateBehavior: datePartOnly
+	fromColumn: fact_positions.Date
+	toColumn: LocalDateTable_34b784b3-4c06-4096-a509-289a2aa03523.Date
+
+relationship a2bbc504-1711-44fd-b73c-73f9102ba558
+	joinOnDateBehavior: datePartOnly
+	fromColumn: fact_snapshots.Date
+	toColumn: LocalDateTable_7585bc0b-c614-4dd2-9815-f29f76caadce.Date
+
+relationship 55b5fc91-72e5-4b2b-a38c-498478f6b269
+	joinOnDateBehavior: datePartOnly
+	fromColumn: fact_trades.date_time
+	toColumn: LocalDateTable_0bc35688-bb75-4ba0-8d96-dd7ee0457bbd.Date
+
+relationship f852b9b2-547c-4c0b-a285-dcd6eb7ff429
+	joinOnDateBehavior: datePartOnly
+	fromColumn: fact_trades.Date
+	toColumn: LocalDateTable_26efe3b8-5087-43eb-bb34-e6868c46a880.Date
+
+relationship AutoDetected_f0ae8a7c-b985-44ce-9802-86986bd14e7b
+	fromColumn: fact_positions.Symbol
+	toColumn: dim_symbol.Symbol
+
+relationship AutoDetected_1fd27d38-67f1-4458-bd4d-e08c4d75ce6f
+	fromColumn: fact_trades.Symbol
+	toColumn: dim_symbol.Symbol
+
+relationship 49c23716-d060-4da4-a2cc-9055afe79132
+	joinOnDateBehavior: datePartOnly
+	fromColumn: fact_benchmark_Prev.Date
+	toColumn: LocalDateTable_8877764a-19d4-4286-ab85-7f70f1a2883d.Date
+
+relationship AutoDetected_95e6a4e7-76f8-4d3e-a393-4b2b34fde01b
+	crossFilteringBehavior: bothDirections
+	fromCardinality: one
+	fromColumn: fact_benchmark_Prev.Index
+	toColumn: fact_benchmark.Index
+
+relationship AutoDetected_b74be27c-75d2-4d58-8a97-6e8c7d478e22
+	crossFilteringBehavior: bothDirections
+	fromCardinality: one
+	fromColumn: AssetSubclass.Symbol
+	toColumn: dim_symbol.Symbol
+

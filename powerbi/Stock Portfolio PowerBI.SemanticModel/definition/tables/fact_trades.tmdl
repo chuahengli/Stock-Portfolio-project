@@ -1,0 +1,144 @@
+table fact_trades
+	lineageTag: 70847982-0797-4593-b4b3-3a96b030698b
+
+	column Order_ID
+		dataType: string
+		lineageTag: e28a95df-b163-497b-973f-c089efe6e4ff
+		summarizeBy: none
+		sourceColumn: Order_ID
+
+		annotation SummarizationSetBy = Automatic
+
+	column date_time
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 565abf3e-edd9-4ca8-bf20-496a9bca4d91
+		summarizeBy: none
+		sourceColumn: date_time
+
+		variation Variation
+			isDefault
+			relationship: 55b5fc91-72e5-4b2b-a38c-498478f6b269
+			defaultHierarchy: LocalDateTable_0bc35688-bb75-4ba0-8d96-dd7ee0457bbd.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+	column Date
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: ff3eb802-9234-4b14-99a0-d90796c0a22e
+		summarizeBy: none
+		sourceColumn: Date
+
+		variation Variation
+			isDefault
+			relationship: f852b9b2-547c-4c0b-a285-dcd6eb7ff429
+			defaultHierarchy: LocalDateTable_26efe3b8-5087-43eb-bb34-e6868c46a880.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column Symbol
+		dataType: string
+		lineageTag: cd6a6026-16f4-4e06-8223-4ef5852484da
+		summarizeBy: none
+		sourceColumn: Symbol
+
+		annotation SummarizationSetBy = Automatic
+
+	column Name
+		dataType: string
+		lineageTag: a291e050-764c-432a-ab5e-945eb6256e66
+		summarizeBy: none
+		sourceColumn: Name
+
+		annotation SummarizationSetBy = Automatic
+
+	column Market
+		dataType: string
+		lineageTag: 2347d7dd-3ad0-4bdb-8a31-9e9e6750aa3f
+		summarizeBy: none
+		sourceColumn: Market
+
+		annotation SummarizationSetBy = Automatic
+
+	column Buy_Sell
+		dataType: string
+		lineageTag: c726dca1-2951-427b-b0b4-a26a5989e75c
+		summarizeBy: none
+		sourceColumn: Buy_Sell
+
+		annotation SummarizationSetBy = Automatic
+
+	column Quantity
+		dataType: double
+		lineageTag: 4d2c0fce-4a3b-4e26-b027-7ed9cf9c2435
+		summarizeBy: sum
+		sourceColumn: Quantity
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column Fill_Price
+		dataType: double
+		lineageTag: d681c2fa-febc-4eff-9a70-0519083faacd
+		summarizeBy: sum
+		sourceColumn: Fill_Price
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column Multiplier
+		dataType: int64
+		formatString: 0
+		lineageTag: 1d18edef-c8fa-4efd-8ded-ae4f6536b4b0
+		summarizeBy: sum
+		sourceColumn: Multiplier
+
+		annotation SummarizationSetBy = Automatic
+
+	column Gross_Amount
+		dataType: double
+		lineageTag: 6a252172-0082-4020-92b2-7701eb7130c7
+		summarizeBy: sum
+		sourceColumn: Gross_Amount
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column Currency
+		dataType: string
+		lineageTag: 5592c454-a3fa-479e-b7f8-44ca7224ee0f
+		summarizeBy: none
+		sourceColumn: Currency
+
+		annotation SummarizationSetBy = Automatic
+
+	column Is_Trade
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: 55dd3b20-cf6d-4173-bddc-81d6e36f0753
+		summarizeBy: none
+		sourceColumn: Is_Trade
+
+		annotation SummarizationSetBy = Automatic
+
+	partition fact_trades = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export\fact_trades.csv"),[Delimiter=",", Columns=12, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Order_ID", type text}, {"date_time", type datetime}, {"Date", type date}, {"Symbol", type text}, {"Name", type text}, {"Market", type text}, {"Buy_Sell", type text}, {"Quantity", type number}, {"Fill_Price", type number}, {"Multiplier", Int64.Type}, {"Gross_Amount", type number}, {"Currency", type text}}),
+				    #"Add Is_Trade Column" = Table.AddColumn(#"Changed Type", "Is_Trade", each [Quantity] <> 0 and [Fill_Price] <> 0, type logical)
+				in
+				    #"Add Is_Trade Column"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

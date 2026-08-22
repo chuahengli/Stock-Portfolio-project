@@ -1,0 +1,32 @@
+table AssetSubclass
+	lineageTag: ca37cb6c-0566-4daa-ba13-48634df45f5e
+
+	column Symbol
+		dataType: string
+		lineageTag: bfde9241-eb66-4610-bb59-5dc42e1cc977
+		summarizeBy: none
+		sourceColumn: Symbol
+
+		annotation SummarizationSetBy = Automatic
+
+	column AssetSubclass
+		dataType: string
+		lineageTag: f97542a3-547e-4c39-8c6e-073b858ed307
+		summarizeBy: none
+		sourceColumn: AssetSubclass
+
+		annotation SummarizationSetBy = Automatic
+
+	partition AssetSubclass = m
+		mode: import
+		source =
+				let
+				    Source = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText("fY/LDoIwEEV/pemahQnRuKVYEYVoaEswhMVEGiXyspaFf28RTFQSl3POncncNMVOLGJsYcEQq6AskQstiqHsJM6sFK8iJzSWX2QFujgheusK/RhUsjXGr7VUtXFNDeWnXlO+Md5Vj1Y3L+LZxADmJZ8xn/j8OxaSfo80dY4oXw+ILoVhETXZfmYLe3qJefu+CFcS7p0a2SHwhnJENZCjENRV6lEdx94BqLP86R0ngv1rt5rNpx+QaDdcfLPsCQ==", BinaryEncoding.Base64), Compression.Deflate)), let _t = ((type nullable text) meta [Serialized.Text = true]) in type table [Symbol = _t, AssetSubclass = _t]),
+				    #"Changed Type" = Table.TransformColumnTypes(Source,{{"Symbol", type text}, {"AssetSubclass", type text}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

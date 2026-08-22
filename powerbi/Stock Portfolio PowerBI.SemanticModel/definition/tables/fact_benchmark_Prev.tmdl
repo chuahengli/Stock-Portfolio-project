@@ -1,0 +1,72 @@
+table fact_benchmark_Prev
+	lineageTag: d8443fb3-be2a-491f-84e8-4c331623bb54
+
+	column Date
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: 551a1a0f-2289-4507-aee3-bc6624985950
+		summarizeBy: none
+		sourceColumn: Date
+
+		variation Variation
+			isDefault
+			relationship: 49c23716-d060-4da4-a2cc-9055afe79132
+			defaultHierarchy: LocalDateTable_8877764a-19d4-4286-ab85-7f70f1a2883d.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column Symbol
+		dataType: string
+		lineageTag: 6a63b3db-bb7a-4145-a7c0-6275e2211a5b
+		summarizeBy: none
+		sourceColumn: Symbol
+
+		annotation SummarizationSetBy = Automatic
+
+	column Close
+		dataType: double
+		lineageTag: 21f0fda8-3d19-411a-a824-f3af8be204ae
+		summarizeBy: sum
+		sourceColumn: Close
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column Index
+		dataType: int64
+		formatString: 0
+		lineageTag: d7455a03-ef93-4816-bcea-983eda9ee44c
+		summarizeBy: none
+		sourceColumn: Index
+
+		annotation SummarizationSetBy = Automatic
+
+	column PrevIndex
+		dataType: string
+		lineageTag: a8901184-48c9-4b68-a1b9-7b26151612e4
+		summarizeBy: none
+		sourceColumn: PrevIndex
+
+		annotation SummarizationSetBy = Automatic
+
+	partition fact_benchmark_Prev = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export\fact_benchmark.csv"),[Delimiter=",", Columns=3, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Date", type date}, {"Symbol", type text}, {"Close", type number}}),
+				    #"Sorted Rows" = Table.Sort(#"Changed Type",{{"Date", Order.Ascending}}),
+				    #"Sorted Rows1" = Table.Sort(#"Sorted Rows",{{"Symbol", Order.Ascending}, {"Date", Order.Ascending}}),
+				    #"Added Index" = Table.AddIndexColumn(#"Sorted Rows1", "Index", 0, 1, Int64.Type),
+				    #"Added Custom" = Table.AddColumn(#"Added Index", "PrevIndex", each [Index] + 1)
+				in
+				    #"Added Custom"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

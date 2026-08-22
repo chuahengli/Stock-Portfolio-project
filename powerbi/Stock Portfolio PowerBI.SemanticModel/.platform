@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "SemanticModel",
+    "displayName": "Stock Portfolio PowerBI"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "e249037a-e327-4841-9594-8496d4ab7d15"
+  }
+}
