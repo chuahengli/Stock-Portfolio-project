@@ -1,0 +1,93 @@
+table Drawdown
+	lineageTag: 9e6975e4-c41b-497e-ae91-0c7574433148
+
+	measure 'Drawdown %' =
+			
+			VAR WindowFilter =
+			    FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+			RETURN
+			CALCULATE(
+			    [DrawdownPct],
+			    KEEPFILTERS(WindowFilter)
+			)
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: cdffc451-8554-4fec-8444-ef7e72b5f33a
+
+	measure DrawdownPct =
+			
+			VAR Num = SUM(Drawdown[Level])
+			VAR Den = SUM(Drawdown[PeakSoFar])
+			RETURN
+			    IF( ISBLANK(Num),
+			        BLANK(),
+			        DIVIDE( Num, Den ) - 1
+			    )
+		lineageTag: 2226b95e-bb67-4c33-97ed-d39bb0533f2f
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Max Drawdown' =
+			
+			
+			MINX(
+			    VALUES(dim_date[Date]),
+			    [Drawdown %]
+			)
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: ea9bff29-514a-4282-abca-b4d396deee08
+
+	column Date
+		formatString: dd/mm/yyyy
+		lineageTag: 1db520f3-47cf-474e-835f-3d2914122d82
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: Performance[Date]
+
+		variation Variation
+			isDefault
+			relationship: 03d0ea1e-fbf5-468d-982c-395d975bf583
+			defaultHierarchy: LocalDateTable_4a5ec782-5974-45de-bc51-dcea25408905.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isDateTimeCustom":true}
+
+	column Level
+		lineageTag: 2be46cf6-3736-4fc0-8609-d30b326b011f
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: [Level]
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column PeakSoFar
+		lineageTag: c52e35de-a269-4d76-9cfb-94d9696fdcc3
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: [PeakSoFar]
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	partition Drawdown = calculated
+		mode: import
+		source =
+				
+				VAR rowss =
+				    ADDCOLUMNS(
+				        ALL(Performance[Date]),
+				        "Level", CALCULATE(SUM(Performance[Level]), Performance[Symbol] = "Portfolio"),
+				        "PeakSoFar", CALCULATE(
+				            MAX(Performance[Level]),
+				            FILTER(ALL(Performance[Date]), Performance[Date] <= CALCULATE(MAX(Performance[Date]))),
+				            Performance[Symbol] = "Portfolio"
+				        )
+				    )
+				RETURN
+				    FILTER(rowss, NOT ISBLANK([Level]))
+
+	annotation PBI_Id = 65a2aad906ab48c88aaaf12486c5e4b7
+

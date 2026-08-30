@@ -1,0 +1,164 @@
+table fact_positions
+	lineageTag: 0c51281c-a4cc-4c42-a78d-99ee8a29d2d4
+
+	measure 'Positions Value' = SUM(fact_positions[Market_Value])
+		lineageTag: 0e315a77-5429-43ac-8347-4598e11141c9
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure Allocation =
+			
+			CALCULATE(
+			    VAR LastDataDay = CALCULATE(MAX(fact_positions[Date]), ALL(dim_symbol))
+			    RETURN
+			        DIVIDE(
+			            CALCULATE(SUM(fact_positions[Market_Value]), fact_positions[Date] = LastDataDay),
+			            CALCULATE(SUM(fact_positions[Market_Value]), fact_positions[Date] = LastDataDay, ALL(dim_symbol))
+			        ),
+			    FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+			)
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: ad6ed0e5-09b9-44ea-a860-90c0482fae8f
+
+	column Date
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: 80be4636-e323-4b31-8fa6-592bd5220f4b
+		summarizeBy: none
+		sourceColumn: Date
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column Symbol
+		dataType: string
+		lineageTag: e9b485cf-6029-40d0-8096-afe80d4ff3ad
+		summarizeBy: none
+		sourceColumn: Symbol
+
+		annotation SummarizationSetBy = Automatic
+
+	column Name
+		dataType: string
+		isHidden
+		lineageTag: 35cdaa42-ba2b-42e6-a617-5133edef404e
+		summarizeBy: none
+		sourceColumn: Name
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column Market
+		dataType: string
+		lineageTag: dcb0a568-f35c-485b-97c7-07ab8d32759a
+		summarizeBy: none
+		sourceColumn: Market
+
+		annotation SummarizationSetBy = Automatic
+
+	column Quantity
+		dataType: double
+		lineageTag: d123ae87-a1fe-4646-8f5f-5493627288f3
+		summarizeBy: sum
+		sourceColumn: Quantity
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column Market_Value
+		dataType: double
+		lineageTag: d6142ee9-3059-47e1-a78a-4dba0a2f996c
+		summarizeBy: sum
+		sourceColumn: Market_Value
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column Diluted_Cost
+		dataType: double
+		lineageTag: 127d8d43-804a-406f-876d-2640e5bf3c23
+		summarizeBy: sum
+		sourceColumn: Diluted_Cost
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column Current_Price
+		dataType: double
+		lineageTag: e03ce692-7411-4bde-925a-3342c20efc69
+		summarizeBy: sum
+		sourceColumn: Current_Price
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column P_L_Percent
+		dataType: double
+		lineageTag: 9ce849fe-e211-4238-a019-9d9e7b1229ca
+		summarizeBy: sum
+		sourceColumn: P_L_Percent
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column P_L
+		dataType: double
+		lineageTag: 3530088f-1454-4a5b-bf1e-6edbbd0d8162
+		summarizeBy: sum
+		sourceColumn: P_L
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column Today_s_P_L
+		dataType: double
+		lineageTag: 45547f0e-6c5d-4788-a0ca-28715e673bec
+		summarizeBy: sum
+		sourceColumn: Today_s_P_L
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column Currency
+		dataType: string
+		lineageTag: a946917a-1d97-404f-aa48-225abf631f29
+		summarizeBy: none
+		sourceColumn: Currency
+
+		annotation SummarizationSetBy = Automatic
+
+	column Portfolio_Percent
+		dataType: double
+		lineageTag: 52ef688c-2d7b-42ed-aaaf-057ff7ba6f5f
+		summarizeBy: sum
+		sourceColumn: Portfolio_Percent
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	partition fact_positions = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export\fact_positions.csv"),[Delimiter=",", Columns=13, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Date", type date}, {"Symbol", type text}, {"Name", type text}, {"Market", type text}, {"Quantity", type number}, {"Market_Value", type number}, {"Diluted_Cost", type number}, {"Current_Price", type number}, {"P_L_Percent", type number}, {"P_L", type number}, {"Today_s_P_L", type number}, {"Currency", type text}, {"Portfolio_Percent", Percentage.Type}}),
+				    #"Divided Column" = Table.TransformColumns(#"Changed Type", {{"P_L_Percent", each _ / 100, type number}}),
+				    #"Changed Type1" = Table.TransformColumnTypes(#"Divided Column",{{"P_L_Percent", Percentage.Type}})
+				in
+				    #"Changed Type1"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

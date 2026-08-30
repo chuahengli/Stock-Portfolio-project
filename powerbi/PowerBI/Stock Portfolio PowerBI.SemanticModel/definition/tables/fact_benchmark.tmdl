@@ -1,0 +1,100 @@
+table fact_benchmark
+	lineageTag: e5458d81-d95f-41ac-aeec-e2efdc66d2c9
+
+	measure 'Benchmark Volatility' =
+			
+			VAR Win = FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+			VAR N = CALCULATE(COUNTA(fact_benchmark[DailyReturn]), Win)
+			VAR FirstD = CALCULATE(MIN(fact_benchmark[Date]), Win)
+			VAR LastD = CALCULATE(MAX(fact_benchmark[Date]), Win)
+			VAR YearSpan = DIVIDE(DATEDIFF(FirstD, LastD, DAY), 365.25)
+			VAR Sd = CALCULATE(STDEVX.P(fact_benchmark, fact_benchmark[DailyReturn]), Win)
+			RETURN
+			    IF(N < 2, BLANK(), Sd * SQRT(DIVIDE(N, YearSpan)))
+		formatString: 0.00%;-0.00%;0.00%
+		lineageTag: c2d802f8-54fb-409e-9e55-5752c515d48c
+
+	column Date
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: b2cb4ede-2f16-4378-aeef-e68dcb8662ec
+		summarizeBy: none
+		sourceColumn: Date
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column Symbol
+		dataType: string
+		lineageTag: 28c03aee-fc55-4cf1-b116-e4e94633fcba
+		summarizeBy: none
+		sourceColumn: Symbol
+
+		annotation SummarizationSetBy = Automatic
+
+	column Close
+		dataType: double
+		lineageTag: c6a50f2d-297e-4e73-8c5e-2061699e008a
+		summarizeBy: sum
+		sourceColumn: Close
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column Index
+		dataType: int64
+		formatString: 0
+		lineageTag: d6cde100-444f-4c2b-acfd-f3016a961949
+		summarizeBy: sum
+		sourceColumn: Index
+
+		annotation SummarizationSetBy = Automatic
+
+	column DailyReturn
+		dataType: double
+		lineageTag: 4a6e8f71-3e7e-44ef-ab5b-da5810657099
+		summarizeBy: sum
+		sourceColumn: DailyReturn
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column PrevClose
+		dataType: double
+		lineageTag: 94de36c2-8138-4f69-b88e-14410bbcf33a
+		summarizeBy: sum
+		sourceColumn: PrevClose
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	partition fact_benchmark = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export\fact_benchmark.csv"),[Delimiter=",", Columns=3, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Date", type date}, {"Symbol", type text}, {"Close", type number}}),
+				    #"Sorted Rows" = Table.Sort(#"Changed Type",{{"Date", Order.Ascending}}),
+				    #"Sorted Rows1" = Table.Sort(#"Sorted Rows",{{"Symbol", Order.Ascending}, {"Date", Order.Ascending}}),
+				    #"Added Index" = Table.AddIndexColumn(#"Sorted Rows1", "Index", 0, 1, Int64.Type),
+				    #"Merged Queries" = Table.NestedJoin(#"Added Index", {"Symbol", "Index"}, fact_benchmark_Prev, {"Symbol", "PrevIndex"}, "fact_benchmark_Prev", JoinKind.LeftOuter),
+				    #"Expanded fact_benchmark_Prev" = Table.ExpandTableColumn(#"Merged Queries", "fact_benchmark_Prev", {"Close"}, {"Close.1"}),
+				    #"Renamed Columns" = Table.RenameColumns(#"Expanded fact_benchmark_Prev",{{"Close.1", "PrevClose"}}),
+				    #"Added Custom" = Table.AddColumn(#"Renamed Columns", "DailyReturn", each ([Close] - [PrevClose]) / [PrevClose]),
+				    #"Changed Type1" = Table.TransformColumnTypes(#"Added Custom",{{"Date", type date}}),
+				    #"Filtered Rows" = Table.SelectRows(#"Changed Type1", each true),
+				    #"Changed Type2" = Table.TransformColumnTypes(#"Filtered Rows",{{"DailyReturn", type number}})
+				in
+				    #"Changed Type2"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

@@ -168,6 +168,13 @@ INCOME_CASHFLOW_TYPES = {
 INTERNAL_REMARK_HINTS = ('fund', 'subscription', 'redemption')
 INCOME_REMARK_HINTS = ('coupon', 'dividend', 'tax', 'fee')
 
+# Broker rewards (Moomoo cash vouchers / coupon deposits) are NOT investment
+# return: the broker is gifting money into the account, like a capital gift.
+# Classify them as external capital so they adjust NAV *units*, not performance.
+# Checked before everything else because 'Coupon Deposit' contains 'coupon'
+# (an income hint) and 'Cash Voucher' arrives under the 'Coupon' type.
+EXTERNAL_REMARK_HINTS = ('voucher', 'coupon deposit')
+
 
 def classify_cashflow(cashflow_type, remark):
     """Return (is_external, is_income) for a single cash-flow row.
@@ -177,6 +184,11 @@ def classify_cashflow(cashflow_type, remark):
     type_s = str(cashflow_type).strip() if cashflow_type is not None else ''
     remark_s = str(remark).strip() if remark is not None else ''
     rem_lower = remark_s.lower()
+
+    # Broker rewards take precedence: voucher / coupon-deposit remarks are
+    # external capital regardless of the declared type.
+    if any(hint in rem_lower for hint in EXTERNAL_REMARK_HINTS):
+        return True, False
 
     is_external = type_s in EXTERNAL_CASHFLOW_TYPES
     is_income = type_s in INCOME_CASHFLOW_TYPES

@@ -5,7 +5,7 @@ from pathlib import Path
 EXP = Path("powerbi/export")
 contract = {
     "dim_date": ["Date","Year","Quarter","QuarterLabel","Month","MonthName","Day","Weekday","WeekdayName","IsWeekend"],
-    "dim_symbol": ["Symbol","AssetClass","IsOption","Underlying","Multiplier","Name","Market","Currency","Sector","Industry"],
+    "dim_symbol": ["Symbol","AssetClass","IsOption","Underlying","Multiplier","Name","Market","Currency","Sector","Industry","Country"],
     "fact_snapshots": ["Date","total_assets","stocks","options","cash","nav","units"],
     "fact_positions": ["Date","Symbol","Name","Market","Quantity","Market_Value","Diluted_Cost","Current_Price","P_L_Percent","P_L","Today_s_P_L","Currency","Portfolio_Percent"],
     "fact_cashflow": ["cashflow_id","Date","Currency","Type","in_out","Amount","Remark","is_external","is_income","CashflowCategory"],
@@ -40,6 +40,9 @@ n_opt = int((ds["AssetClass"] == "Option").sum())
 print(f"dim_symbol: stocks={n_stock} options={n_opt}")
 blanks = int((ds["Sector"].isna() | (ds["Sector"] == "")).sum())
 print("  blank sectors:", blanks, "| sample sectors:", sorted(ds["Sector"].dropna().unique())[:8])
+countries = sorted(ds["Country"].dropna().unique())
+n_blank_country = int((ds["Country"].isna() | (ds["Country"] == "")).sum())
+print("  countries:", countries, "| blank:", n_blank_country)
 opt_row = ds[ds["AssetClass"] == "Option"].iloc[0].to_dict()
 print("  option row:", opt_row)
 ft = pd.read_csv(EXP / "fact_trades.csv")

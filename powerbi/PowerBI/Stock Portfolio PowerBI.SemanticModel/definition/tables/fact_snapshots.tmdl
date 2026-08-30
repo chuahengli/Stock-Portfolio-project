@@ -1,0 +1,219 @@
+table fact_snapshots
+	lineageTag: d9f71962-562b-4237-bc5b-1b16f4ebd038
+
+	measure 'Total Assets (all history)' = CALCULATE(SUM(fact_snapshots[total_assets]), ALL(dim_date))
+		formatString: 0.00
+		lineageTag: a8e30034-90fe-4945-8e1b-4fbd39e066a8
+
+	measure 'Latest Total Assets' =
+			
+			VAR LatestDay =
+			    CALCULATE(
+			        MAX(dim_date[Date]),
+			        LASTNONBLANK(dim_date[Date], CALCULATE(SUM(fact_snapshots[total_assets]))),
+			        FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+			    )
+			RETURN CALCULATE(SUM(fact_snapshots[total_assets]), dim_date[Date] = LatestDay)
+		formatString: \$#,0.000;(\$#,0.000);\$#,0.000
+		lineageTag: 1eeb9c33-b620-4ae2-b1d6-cc790e892fb4
+
+		annotation PBI_FormatHint = {"currencyCulture":"en-US"}
+
+	measure 'Stocks Value' = ```
+			SUM(fact_snapshots[stocks]) 
+			```
+		formatString: 0.00
+		lineageTag: 10285c0f-93a8-4c3d-925d-e2becec4d362
+
+	measure 'Options Value' = SUM(fact_snapshots[options])
+		formatString: 0.00
+		lineageTag: e02fc4d0-108e-4b1a-b2d3-3369549ff371
+
+	measure 'Cash Value' = SUM(fact_snapshots[cash])
+		formatString: 0.00
+		lineageTag: 3ce2e266-ae95-41c8-9a3e-e3201df1a153
+
+	measure 'Component Total' = [Stocks Value] + [Options Value] + [Cash Value]
+		formatString: 0.00
+		lineageTag: ec8b977e-a356-4fac-9fb6-43d9001013e1
+
+	measure 'Stocks Ratio' =
+			
+			VAR WindowFilter = FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+			VAR WindowValue = CALCULATE([Stocks Value], KEEPFILTERS(WindowFilter))
+			VAR WindowTotal = CALCULATE([Component Total], KEEPFILTERS(WindowFilter))
+			RETURN DIVIDE(WindowValue, WindowTotal)
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: 9b4a4eb3-3eec-4a29-b493-d53b9124bdcb
+
+	measure 'Options Ratio' =
+			
+			VAR WindowFilter = FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+			VAR WindowValue = CALCULATE([Options Value], KEEPFILTERS(WindowFilter))
+			VAR WindowTotal = CALCULATE([Component Total], KEEPFILTERS(WindowFilter))
+			RETURN DIVIDE(WindowValue, WindowTotal)
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: 2cdb4892-2af1-46a4-8de8-00ec506330ba
+
+	measure 'Cash Ratio' =
+			
+			VAR WindowFilter = FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+			VAR WindowValue = CALCULATE([Cash Value], KEEPFILTERS(WindowFilter))
+			VAR WindowTotal = CALCULATE([Component Total], KEEPFILTERS(WindowFilter))
+			RETURN DIVIDE(WindowValue, WindowTotal)
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: 7e69a6a2-1c33-4df3-a227-78a5e6c06f56
+
+	measure 'Portfolio Volatility' =
+			
+			VAR Win = FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+			VAR N = CALCULATE(COUNTA(fact_snapshots[Time-Weight Return]), Win)
+			VAR FirstD = CALCULATE(MIN(fact_snapshots[Date]), Win)
+			VAR LastD = CALCULATE(MAX(fact_snapshots[Date]), Win)
+			VAR YearSpan = DIVIDE(DATEDIFF(FirstD, LastD, DAY), 365.25)
+			VAR Sd = CALCULATE(STDEVX.P(fact_snapshots, fact_snapshots[Time-Weight Return]), Win)
+			RETURN
+			    IF(N < 2, BLANK(), Sd * SQRT(DIVIDE(N, YearSpan)))
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: 28381dff-5b37-4d9c-9e91-6cd3dc88dcff
+
+	measure 'Stocks Ratio AsOf' =
+			
+			VAR AsOfDay = CALCULATE(MAX(fact_snapshots[Date]), FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Date Anchor]))
+			RETURN CALCULATE(DIVIDE([Stocks Value], [Component Total]), fact_snapshots[Date] = AsOfDay)
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: efb6b604-f592-47a5-b3e9-809b702cfefd
+
+	measure 'Options Ratio AsOf' =
+			
+			VAR AsOfDay = CALCULATE(MAX(fact_snapshots[Date]), FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End]))
+			RETURN CALCULATE(DIVIDE([Options Value], [Component Total]), fact_snapshots[Date] = AsOfDay)
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: a38fce8f-5dbc-461f-b92c-98e1804ceab9
+
+	measure 'Cash Ratio AsOf' =
+			
+			VAR AsOfDay = CALCULATE(MAX(fact_snapshots[Date]), FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End]))
+			RETURN CALCULATE(DIVIDE([Cash Value], [Component Total]), fact_snapshots[Date] = AsOfDay)
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: e03d68ec-dfb7-4cd0-8c03-a90b7f38303e
+
+	column Date
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: 0530f0c7-de83-4473-b318-d9ae2abdb86c
+		summarizeBy: none
+		sourceColumn: Date
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column total_assets
+		dataType: double
+		lineageTag: 1b14e7e4-bffe-4e67-bfc5-f31782068e5b
+		summarizeBy: sum
+		sourceColumn: total_assets
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column stocks
+		dataType: double
+		lineageTag: 302207a2-ba62-4135-b70d-b902522826f2
+		summarizeBy: sum
+		sourceColumn: stocks
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column options
+		dataType: double
+		lineageTag: 4f8f0626-005c-4069-903a-a565cfe20c1d
+		summarizeBy: sum
+		sourceColumn: options
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column cash
+		dataType: double
+		lineageTag: be96db89-3126-4911-9b63-b7dbfc4cdbe7
+		summarizeBy: sum
+		sourceColumn: cash
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column nav
+		dataType: double
+		lineageTag: 0fd222a3-09ca-4ca3-bfd9-880839161cde
+		summarizeBy: sum
+		sourceColumn: nav
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column units
+		dataType: int64
+		formatString: 0
+		lineageTag: c7a4798c-ada3-42bb-ae20-8db09a767801
+		summarizeBy: sum
+		sourceColumn: units
+
+		annotation SummarizationSetBy = Automatic
+
+	column Index
+		dataType: int64
+		formatString: 0
+		lineageTag: 82a8d1e1-7375-411b-8668-6c6fa1d67bda
+		summarizeBy: sum
+		sourceColumn: Index
+
+		annotation SummarizationSetBy = Automatic
+
+	column Prev_Nav
+		dataType: double
+		lineageTag: 0f2bfa40-7584-487e-94b9-7805f355d5b9
+		summarizeBy: sum
+		sourceColumn: Prev_Nav
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column 'Time-Weight Return'
+		dataType: double
+		lineageTag: dc2dde7f-20f9-4099-9fd2-fbc99be8d23c
+		summarizeBy: sum
+		sourceColumn: Time-Weight Return
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	partition fact_snapshots = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export\fact_snapshots.csv"),[Delimiter=",", Columns=7, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Date", type date}, {"total_assets", type number}, {"stocks", type number}, {"options", type number}, {"cash", type number}, {"nav", type number}, {"units", Int64.Type}}),
+				    #"Sorted Rows" = Table.Sort(#"Changed Type",{{"Date", Order.Ascending}}),
+				    #"Added Index" = Table.AddIndexColumn(#"Sorted Rows", "Index", 0, 1, Int64.Type),
+				    #"Merged Queries" = Table.NestedJoin(#"Added Index", {"Index"}, fact_snapshots_prev, {"Prev_Index"}, "fact_snapshots_prev", JoinKind.LeftOuter),
+				    #"Expanded fact_snapshots_prev" = Table.ExpandTableColumn(#"Merged Queries", "fact_snapshots_prev", {"Prev_Nav"}, {"Prev_Nav"}),
+				    #"Added Custom" = Table.AddColumn(#"Expanded fact_snapshots_prev", "Time-Weight Return", each ([nav]/[Prev_Nav]) - 1),
+				    #"Changed Type1" = Table.TransformColumnTypes(#"Added Custom",{{"Time-Weight Return", type number}})
+				in
+				    #"Changed Type1"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

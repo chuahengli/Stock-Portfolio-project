@@ -1,0 +1,8 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+  "name": "cbe4b8c3166e70cb38d2",
+  "displayName": "Risks",
+  "displayOption": "FitToWidth",
+  "height": 1080,
+  "width": 1920
+}

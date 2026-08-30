@@ -1,0 +1,25 @@
+table CustomDates
+	lineageTag: c1f878b2-6d0e-44aa-bd97-2da6d4ada3b5
+
+	column Date
+		formatString: dd/mm/yyyy
+		lineageTag: 018df286-cb5f-41a2-8676-11285bda7ea7
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Date]
+
+		variation Variation
+			isDefault
+			relationship: dc2da0af-d1d9-4935-9053-1889361e9f03
+			defaultHierarchy: LocalDateTable_bc787732-7f57-40e4-a8b6-642596ea4087.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isDateTimeCustom":true}
+
+	partition CustomDates = calculated
+		mode: import
+		source = CALENDAR(MIN(dim_date[Date]), MAX(dim_date[Date]))
+
+	annotation PBI_Id = 152bd756e72b42cca3f41aed52c20277
+

@@ -1,0 +1,33 @@
+model Model
+	culture: en-US
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	sourceQueryCulture: en-SG
+	dataAccessOptions
+		legacyRedirects
+		returnErrorValuesAsNull
+
+annotation __PBI_TimeIntelligenceEnabled = 1
+
+annotation PBI_QueryOrder = ["dim_date","dim_symbol","fact_benchmark","fact_benchmark_Prev","fact_cashflow","fact_positions","fact_snapshots","fact_snapshots_prev","fact_trades","AssetSubclass"]
+
+annotation PBI_ProTooling = ["DevMode"]
+
+ref table dim_date
+ref table DateTableTemplate_d66343ec-0c5b-46da-89db-26906519e80a
+ref table dim_symbol
+ref table fact_benchmark
+ref table fact_cashflow
+ref table fact_positions
+ref table fact_snapshots
+ref table fact_trades
+ref table LocalDateTable_0bc35688-bb75-4ba0-8d96-dd7ee0457bbd
+ref table Period
+ref table CustomDates
+ref table LocalDateTable_bc787732-7f57-40e4-a8b6-642596ea4087
+ref table Performance
+ref table Drawdown
+ref table LocalDateTable_4a5ec782-5974-45de-bc51-dcea25408905
+ref table 'Measures Table'
+
+ref cultureInfo en-US
+

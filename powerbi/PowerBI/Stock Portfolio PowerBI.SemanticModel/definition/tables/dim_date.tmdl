@@ -1,0 +1,118 @@
+table dim_date
+	lineageTag: 8834dfa0-3a19-413e-b8d7-5199cbd7113d
+	dataCategory: Time
+
+	column Date
+		dataType: dateTime
+		isKey
+		formatString: Long Date
+		lineageTag: 41096c2a-e604-4bc7-93c0-797927048316
+		summarizeBy: none
+		sourceColumn: Date
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column Year
+		dataType: int64
+		formatString: 0
+		lineageTag: d1f33c7f-a818-41cf-afbc-62e96fc57ce0
+		summarizeBy: sum
+		sourceColumn: Year
+
+		annotation SummarizationSetBy = Automatic
+
+	column Quarter
+		dataType: int64
+		formatString: 0
+		lineageTag: 9b995506-5ec0-48a8-9bd6-2fe7a5166842
+		summarizeBy: sum
+		sourceColumn: Quarter
+
+		annotation SummarizationSetBy = Automatic
+
+	column QuarterLabel
+		dataType: string
+		lineageTag: 2a8a8bfc-a712-4a91-9543-bcaa1f5982f6
+		summarizeBy: none
+		sourceColumn: QuarterLabel
+
+		annotation SummarizationSetBy = Automatic
+
+	column Month
+		dataType: int64
+		formatString: 0
+		lineageTag: 6b3cac5f-9de4-4363-a4fc-6e6697105217
+		summarizeBy: sum
+		sourceColumn: Month
+
+		annotation SummarizationSetBy = Automatic
+
+	column MonthName
+		dataType: string
+		lineageTag: 33796c72-ae29-40b6-993a-e8be17079577
+		summarizeBy: none
+		sourceColumn: MonthName
+
+		annotation SummarizationSetBy = Automatic
+
+	column Day
+		dataType: int64
+		formatString: 0
+		lineageTag: 728688d1-ef38-4658-8f01-68708fd4a066
+		summarizeBy: sum
+		sourceColumn: Day
+
+		annotation SummarizationSetBy = Automatic
+
+	column Weekday
+		dataType: int64
+		formatString: 0
+		lineageTag: ea828a5c-4973-4e65-a0c6-8396b27785c8
+		summarizeBy: sum
+		sourceColumn: Weekday
+
+		annotation SummarizationSetBy = Automatic
+
+	column WeekdayName
+		dataType: string
+		lineageTag: 54234626-a22b-459b-b1c3-43b3e3b03d45
+		summarizeBy: none
+		sourceColumn: WeekdayName
+
+		annotation SummarizationSetBy = Automatic
+
+	column IsWeekend
+		dataType: int64
+		formatString: 0
+		lineageTag: b8b6e80f-c3b9-408a-a46d-22472f062354
+		summarizeBy: sum
+		sourceColumn: IsWeekend
+
+		annotation SummarizationSetBy = Automatic
+
+	column YearMonth
+		dataType: string
+		lineageTag: f35b5957-8c47-4827-ad05-c499c94d73ae
+		summarizeBy: none
+		sourceColumn: YearMonth
+
+		annotation SummarizationSetBy = Automatic
+
+	partition dim_date = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export\dim_date.csv"),[Delimiter=",", Columns=10, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Date", type date}, {"Year", Int64.Type}, {"Quarter", Int64.Type}, {"QuarterLabel", type text}, {"Month", Int64.Type}, {"MonthName", type text}, {"Day", Int64.Type}, {"Weekday", Int64.Type}, {"WeekdayName", type text}, {"IsWeekend", Int64.Type}}),
+				    #"Added Custom" = Table.AddColumn(#"Changed Type", "YearMonth", each Date.ToText([Date], "yyyy-MM")),
+				    #"Sorted Rows" = Table.Sort(#"Added Custom",{{"YearMonth", Order.Ascending}})
+				in
+				    #"Sorted Rows"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

@@ -105,28 +105,129 @@ def save_meta(meta: dict) -> None:
     META_PATH.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
 
-def enrich(tickers: list[str], meta: dict, allow_network: bool) -> dict:
-    """Fill Sector/Industry for tickers missing from the cache.
+# Fallbacks for tickers yfinance can't resolve by bare symbol.
+# - SGX-listed names (D05, G3B, MBH, ME8U, S63 ...) need the '.SI' suffix.
+# - Berkshire 'BRK' is the legacy class-B symbol; Yahoo serves it as 'BRK-B'.
+TICKER_VARIANTS: dict[str, str] = {"BRK": "BRK-B"}
+
+# Exchange codes from which we can infer a country when 'country' is missing.
+US_EXCHANGES = {"NMS", "NGM", "NYQ", "ASE", "PCX", "BTS", "OQ", "NCM"}
+# Broader exchange code -> country map (used when 'country' is missing).
+EXCHANGE_COUNTRY = {ex: "United States" for ex in US_EXCHANGES}
+EXCHANGE_COUNTRY["SES"] = "Singapore"   # Singapore Exchange
+
+# Fields that make an info dict usable for enrichment WITHOUT inference.
+# ('exchange' alone is NOT here - see _has_metadata.)
+META_KEYS = ("country", "Country", "Sector", "sector", "Industry", "industry")
+
+
+def _has_metadata(info: dict) -> bool:
+    """Usable metadata = real fundamentals, OR a recognized listing exchange
+    (country can then be inferred from it). Yahoo serves junk-but-truthy dicts
+    for ambiguous/unresolvable tickers -- e.g. bare 'BRK' returns a MUTUALFUND
+    placeholder with exchange 'YHD'. Such placeholders must fall through to
+    the next candidate (e.g. 'BRK-B') instead of winning with blank fields."""
+    if any(str(info.get(k) or "").strip() for k in META_KEYS):
+        return True
+    return str(info.get("exchange") or "").strip() in EXCHANGE_COUNTRY
+
+
+def _meta_filled(entry: dict | None) -> bool:
+    """A cache entry counts as filled only if at least one field has a value.
+    All-blank entries (e.g. padded offline right after a failed fetch) must be
+    retried on the next network run, not trusted as 'already enriched'."""
+    return bool(entry) and any(
+        str(entry.get(k) or "").strip()
+        for k in ("Sector", "Industry", "Country")
+    )
+
+
+def _ticker_candidates(t: str, venue: str = "") -> list[str]:
+    if t in TICKER_VARIANTS:
+        return [t, TICKER_VARIANTS[t]]
+    # SGX names contain digits (D05, G3B, ME8U, S63, ...) so the check is
+    # isalnum, not isalpha. A bare US ticker that 404s will try '.SI' too -
+    # harmless: the wrong-suffix lookup also 404s.
+    if t.isalnum() and 2 <= len(t) <= 4:
+        # Known-SG listing venue (from the DB): try the SGX suffix FIRST.
+        # Bare-symbol-first can hit an unrelated US listing sharing the ticker
+        # whose full metadata wins before '.SI' gets a turn (seen with 'MBH',
+        # a SGX bond ETF that Yahoo resolves to a US namesake) and locks in
+        # the wrong country permanently.
+        if venue == "SG":
+            return [f"{t}.SI", t]
+        return [t, f"{t}.SI"]
+    return [t]
+
+
+def _fetch_info(yf, cand: str, attempts: int = 3) -> dict:
+    """Fetch a candidate symbol's info, retrying transient failures.
+    Yahoo rate-limits mid-batch: a call that 404s/429s inside a long run
+    usually succeeds on retry seconds later."""
+    for i in range(attempts):
+        try:
+            info = (yf.Ticker(cand).info) or {}
+            if info:
+                return info
+        except Exception:
+            pass
+        time.sleep(0.4 * (i + 1))
+    return {}
+
+
+def enrich(tickers: list[str], meta: dict, allow_network: bool,
+           venues: dict[str, str] | None = None) -> dict:
+    """Fill Sector/Industry/Country for tickers missing from the cache.
     Network is best-effort (never fails the export); cache survives reruns.
-    Legacy cache files used lowercase keys - read both spellings."""
-    missing = sorted({t for t in tickers if t not in meta})
+    Legacy cache files used lowercase keys - read both spellings.
+    A stale entry is one without a 'Country' key (schema bump) OR one whose
+    fields are all blank (offline padding after a failed fetch) -- both get
+    retried on network runs instead of being trusted as 'already enriched'.
+    'venues' optionally maps ticker -> listing venue (e.g. 'SG') learned from
+    the portfolio DB, used to pick smarter Yahoo candidates for ambiguous
+    tickers."""
+    venues = venues or {}
+    missing = sorted(t for t in tickers if not _meta_filled(meta.get(t)))
     if missing and allow_network:
         try:
             import yfinance as yf
             for t in missing:
                 try:
-                    info = (yf.Ticker(t).info) or {}
+                    info: dict = {}
+                    # Try the bare symbol first (SGX-suffixed first when the DB
+                    # says the venue is SG), then variants. A fallback candidate
+                    # is only used if the previous one returns no usable metadata.
+                    for cand in _ticker_candidates(t, venues.get(t, "")):
+                        cand_info = _fetch_info(yf, cand)
+                        if cand_info and _has_metadata(cand_info):
+                            info = cand_info
+                            break
+                    country = (info.get("country") or info.get("Country") or "").strip()
+                    if not country and info.get("exchange") in EXCHANGE_COUNTRY:
+                        country = EXCHANGE_COUNTRY[info.get("exchange")]
+                    if not _has_metadata(info):
+                        # No usable metadata from any candidate (unknown symbol
+                        # or rate-limited): do NOT cache - retry on next run.
+                        meta.pop(t, None)
+                        continue
                     meta[t] = {
                         "Sector": (info.get("Sector") or info.get("sector") or "").strip(),
                         "Industry": (info.get("Industry") or info.get("industry") or "").strip(),
+                        "Country": country,
                     }
                 except Exception:
-                    meta[t] = {"Sector": "", "Industry": ""}
+                    # Do NOT cache a failed fetch: leave the entry missing so the
+                    # next network run retries it (rate-limited calls recover).
+                    meta.pop(t, None)
                 time.sleep(0.1)
         except Exception:
             pass  # offline: export must never fail
-    for t in missing:
-        meta.setdefault(t, {"Sector": "", "Industry": ""})
+    if not allow_network:
+        # Only pad blanks offline. A network run that failed a fetch leaves the
+        # ticker MISSING from the cache so the next run retries it instead of
+        # locking in a blank (rate-limited calls recover).
+        for t in missing:
+            meta.setdefault(t, {"Sector": "", "Industry": "", "Country": ""})
     return meta
 
 
@@ -194,16 +295,35 @@ def build_dim_symbol(conn: sqlite3.Connection, allow_network: bool) -> pd.DataFr
             "Currency": ccy_lk.get(sym, ""),
         })
 
-    meta = enrich(list(stock_tickers), load_meta(), allow_network)
+    # Venue per stock ticker from trade history (moomoo records it per order):
+    # lets the Yahoo lookup try the right exchange suffix FIRST for ambiguous
+    # tickers (e.g. MBH is SGX-listed but collides with a US-listed namesake).
+    venue_lk: dict[str, str] = {}
+    for tbl in ("transactions", "historical_orders"):
+        try:
+            for s, mkt in cur.execute(
+                f'SELECT DISTINCT Symbol, Market FROM "{tbl}" '
+                f'WHERE Market IS NOT NULL AND Market != ""'
+            ):
+                if s and not s.startswith("^"):
+                    parent = parse_option_symbol(s)
+                    key = parent["Underlying"] if parent else s
+                    venue_lk.setdefault(key, (mkt or "").strip().upper())
+        except Exception:
+            pass
+
+    meta = enrich(list(stock_tickers), load_meta(), allow_network,
+                  venues=venue_lk)
     save_meta(meta)
     for r in rows:
         parent = r["Underlying"] or r["Symbol"]
         info = meta.get(parent) or {}
         r["Sector"] = info.get("Sector") or info.get("sector") or ""
         r["Industry"] = info.get("Industry") or info.get("industry") or ""
+        r["Country"] = info.get("Country") or info.get("country") or ""
 
     cols = ["Symbol", "AssetClass", "IsOption", "Underlying", "Multiplier",
-            "Name", "Market", "Currency", "Sector", "Industry"]
+            "Name", "Market", "Currency", "Sector", "Industry", "Country"]
     return pd.DataFrame(rows)[cols]
 
 
@@ -240,7 +360,7 @@ def build_fact_cashflow(conn: sqlite3.Connection) -> pd.DataFrame:
         if r["is_external"]:
             return "External Capital"
         if r["is_income"]:
-            return "Investment Income"
+            return "Dividend Income"
         return "Internal"
     df["CashflowCategory"] = df.apply(_flow, axis=1)
     return df

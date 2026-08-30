@@ -1,0 +1,91 @@
+table Period
+	lineageTag: e330093f-308f-4fb7-ab49-78859bf10a23
+
+	measure 'Date Anchor' = CALCULATE(MAX(fact_snapshots[Date]), ALL(dim_date), ALL(fact_positions))
+		formatString: General Date
+		lineageTag: 305c8624-9821-4604-afae-a1022dc5b8ef
+
+	measure WindowStart =
+			
+			VAR CustomStart = IF(ISFILTERED(CustomDates[Date]), MIN(CustomDates[Date]))
+			VAR Anchor = [Date Anchor]
+			VAR Label = SELECTEDVALUE(Period[Label])
+			RETURN
+			IF(
+			    NOT ISBLANK(CustomStart),
+			    CustomStart,
+			    SWITCH(
+			        Label,
+			        "1W",  Anchor - 7,
+			        "1M",  EDATE(Anchor, -1),
+			        "3M",  EDATE(Anchor, -3),
+			        "6M",  EDATE(Anchor, -6),
+			        "YTD", DATE(YEAR(Anchor), 1, 1),
+			        "1Y",  EDATE(Anchor, -12),
+			        "2Y",  EDATE(Anchor, -24),
+			        MIN(dim_date[Date])
+			    )
+			)
+		formatString: General Date
+		lineageTag: 84ca294d-8b06-494e-abca-5d704922f1da
+
+	measure IsInWindow =
+			
+			VAR S    = [WindowStart]
+			VAR Dmin = MIN(dim_date[Date])
+			VAR Dmax = MAX(dim_date[Date])
+			RETURN
+			IF(
+			    Dmin = Dmax,
+			    IF(Dmin >= S && Dmin <= [Date Anchor], 1, 0),
+			    IF(Dmax >= S && Dmin <= [Date Anchor], 1, 0)
+			)
+		formatString: 0
+		lineageTag: b5c0220f-88d1-4648-9462-a0b210d074ee
+
+	measure 'Window End' =
+			
+			VAR CustomEnd = IF(ISFILTERED(CustomDates[Date]), MAX(CustomDates[Date]))
+			RETURN IF(ISBLANK(CustomEnd), [Date Anchor], MIN(CustomEnd, [Date Anchor]))
+		formatString: General Date
+		lineageTag: 1c4bf090-9229-4bf5-b982-ca02d9724a71
+
+	column Label
+		lineageTag: 0d6af111-e4f7-4e8d-b6d3-39446a178b40
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Label]
+		sortByColumn: Sort
+
+		annotation SummarizationSetBy = Automatic
+
+	column Sort
+		formatString: 0
+		lineageTag: aa423977-2cd1-471e-8403-500b921daefe
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: [Sort]
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Period = calculated
+		mode: import
+		source =
+				
+				DATATABLE(
+				    "Label", STRING,
+				    "Sort", INTEGER,
+				    {
+				        {"1W", 1},
+				        {"1M", 2},
+				        {"3M", 3},
+				        {"6M", 4},
+				        {"YTD", 5},
+				        {"1Y", 6},
+				        {"2Y", 7},
+				        {"ALL", 8}
+				    }
+				)
+
+	annotation PBI_Id = c08f4edb318f4e46a1afee437f377425
+

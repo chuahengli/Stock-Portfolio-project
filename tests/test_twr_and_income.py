@@ -33,15 +33,23 @@ def test_dividend_tax_is_income_not_external():
     assert inc is True
 
 
-def test_coupon_is_income_not_external():
-    # Previously misclassified as external capital -- the core bug being fixed.
+def test_cash_voucher_is_external_not_income():
+    # Moomoo reward voucher: the broker gifting money = capital, NOT income.
     ext, inc = classify_cashflow("Coupon", "Cash Voucher")
-    assert ext is False
-    assert inc is True
+    assert ext is True
+    assert inc is False
 
 
-def test_others_coupon_deposit_is_income():
+def test_others_coupon_deposit_is_external():
+    # Moomoo 'Coupon Deposit' reward: same story, arrives under 'Others'.
     ext, inc = classify_cashflow("Others", "Coupon Deposit")
+    assert ext is True
+    assert inc is False
+
+
+def test_genuine_bond_coupon_is_income():
+    # A real investment coupon (no voucher wording) stays investment income.
+    ext, inc = classify_cashflow("Coupon", "BOND COUPON 5.00 USD PER UNIT")
     assert ext is False
     assert inc is True
 
@@ -103,8 +111,8 @@ def test_cleanup_cashflow_flags_rows():
     # Dividend + its tax -> income only
     assert by_id[1] == (0, 1)
     assert by_id[2] == (0, 1)
-    # Cash voucher coupon -> income only (NOT external)
-    assert by_id[3] == (0, 1)
+    # Cash voucher coupon -> EXTERNAL capital (broker reward, NOT income)
+    assert by_id[3] == (1, 0)
     # Bank transfer -> external capital only
     assert by_id[4] == (1, 0)
     # PayNow deposit (Others) -> external only

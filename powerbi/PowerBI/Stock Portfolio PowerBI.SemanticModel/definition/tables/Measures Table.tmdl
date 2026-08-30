@@ -1,0 +1,49 @@
+table 'Measures Table'
+	lineageTag: d92d99e3-b7a8-47e0-bf4e-f39d5f4c93f2
+
+	measure 'Beta (vs S&P500)' = ```
+			
+			
+			  VAR Win = FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+			  VAR MeanP = CALCULATE(AVERAGE(fact_snapshots[Time-Weight Return]), Win)
+			  VAR MeanB = CALCULATE(AVERAGE(fact_benchmark[DailyReturn]), Win, fact_benchmark[Symbol] = "^GSPC")
+			  VAR Cov =
+			      CALCULATE(
+			          AVERAGEX(
+			              VALUES(dim_date[Date]),
+			              VAR Rp = CALCULATE(AVERAGE(fact_snapshots[Time-Weight Return]))
+			              VAR Rb = CALCULATE(AVERAGE(fact_benchmark[DailyReturn]), fact_benchmark[Symbol] = "^GSPC")
+			              RETURN IF(ISBLANK(Rp) || ISBLANK(Rb), BLANK(), (Rp - MeanP) * (Rb - MeanB))
+			          ),
+			          Win
+			      )
+			  VAR VarB = 
+			      CALCULATE(
+			          AVERAGEX(
+			              VALUES(dim_date[Date]),
+			              VAR Rb = CALCULATE(AVERAGE(fact_benchmark[DailyReturn]), fact_benchmark[Symbol] = "^GSPC")
+			              RETURN IF(ISBLANK(Rb), BLANK(), (Rb - MeanB) ^ 2)
+			          ),
+			          Win
+			      )
+			  RETURN DIVIDE(Cov, VarB)
+			```
+		lineageTag: 5a7e8114-d3bc-4e2b-9203-9424e817f95a
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column Dummy
+		formatString: 0
+		lineageTag: a88a010a-7a21-4010-a38e-dc5717b7e196
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: [Dummy]
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'Measures Table' = calculated
+		mode: import
+		source = ROW("Dummy", 1)
+
+	annotation PBI_Id = 5250da8acbfd48f59df3dfc1ac0dc2ba
+

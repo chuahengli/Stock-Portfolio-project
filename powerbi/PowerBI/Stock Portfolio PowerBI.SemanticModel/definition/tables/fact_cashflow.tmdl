@@ -1,0 +1,124 @@
+table fact_cashflow
+	lineageTag: 97a3bdc0-07a9-4378-b60d-d8e220eef59e
+
+	measure 'Dividend and Interest Income All Time' = ```
+			CALCULATE(SUM(fact_cashflow[Amount]), fact_cashflow[CashflowCategory] = "Dividend Income", 
+			                            FILTER(ALL(dim_date[Date]), dim_date[Date] <= MAX(dim_date[Date])))
+			```
+		lineageTag: 1eb2a6f9-1c05-4c6a-842f-d00291c2eb0a
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column cashflow_id
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: df2e7e5f-b68f-4663-8a32-4db0390ce106
+		summarizeBy: sum
+		sourceColumn: cashflow_id
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column Date
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: 3a3f5412-2702-4b52-8bea-64dc160ffb53
+		summarizeBy: none
+		sourceColumn: Date
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column Currency
+		dataType: string
+		lineageTag: 5d3a1de9-dfda-4942-9e1e-6fe13c5afadf
+		summarizeBy: none
+		sourceColumn: Currency
+
+		annotation SummarizationSetBy = Automatic
+
+	column Type
+		dataType: string
+		lineageTag: 7c41c039-ae56-45f5-85b9-437cdf943304
+		summarizeBy: none
+		sourceColumn: Type
+
+		annotation SummarizationSetBy = Automatic
+
+	column in_out
+		dataType: string
+		lineageTag: 81e246be-3955-42d5-80a9-bf152e773bed
+		summarizeBy: none
+		sourceColumn: in_out
+
+		annotation SummarizationSetBy = Automatic
+
+	column Amount
+		dataType: double
+		lineageTag: a0ec01ca-1d58-40c5-bcca-8fe71c33b3c4
+		summarizeBy: sum
+		sourceColumn: Amount
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column Remark
+		dataType: string
+		lineageTag: c6b81f4a-6125-46d0-892e-65c28e1ba380
+		summarizeBy: none
+		sourceColumn: Remark
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column is_external
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 3a5b0f16-e326-47f8-a353-5c390b7bada4
+		summarizeBy: sum
+		sourceColumn: is_external
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column is_income
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 0e242e6b-4d78-4a07-836e-bb4137138218
+		summarizeBy: sum
+		sourceColumn: is_income
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column CashflowCategory
+		dataType: string
+		lineageTag: 6a5c834d-e177-413d-8006-15eaefe9d994
+		summarizeBy: none
+		sourceColumn: CashflowCategory
+
+		annotation SummarizationSetBy = Automatic
+
+	partition fact_cashflow = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export\fact_cashflow.csv"),[Delimiter=",", Columns=10, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"cashflow_id", Int64.Type}, {"Date", type date}, {"Currency", type text}, {"Type", type text}, {"in_out", type text}, {"Amount", type number}, {"Remark", type text}, {"is_external", Int64.Type}, {"is_income", Int64.Type}, {"CashflowCategory", type text}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

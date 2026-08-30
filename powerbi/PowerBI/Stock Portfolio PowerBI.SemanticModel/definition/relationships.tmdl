@@ -1,0 +1,60 @@
+relationship 55b5fc91-72e5-4b2b-a38c-498478f6b269
+	joinOnDateBehavior: datePartOnly
+	fromColumn: fact_trades.date_time
+	toColumn: LocalDateTable_0bc35688-bb75-4ba0-8d96-dd7ee0457bbd.Date
+
+relationship AutoDetected_f0ae8a7c-b985-44ce-9802-86986bd14e7b
+	fromColumn: fact_positions.Symbol
+	toColumn: dim_symbol.Symbol
+
+relationship AutoDetected_1fd27d38-67f1-4458-bd4d-e08c4d75ce6f
+	fromColumn: fact_trades.Symbol
+	toColumn: dim_symbol.Symbol
+
+relationship 907231cd-2803-42b2-978e-d9c6db4ec8ac
+	fromColumn: fact_benchmark.Date
+	toColumn: dim_date.Date
+
+relationship afbf198c-a8a2-1a78-ae71-070160e8643d
+	fromColumn: fact_cashflow.Date
+	toColumn: dim_date.Date
+
+relationship 601c7a26-d054-b427-ac45-1c28a2632942
+	fromColumn: fact_positions.Date
+	toColumn: dim_date.Date
+
+relationship 1c399f08-7455-92d7-4a52-3f560e470b54
+	fromColumn: fact_trades.Date
+	toColumn: dim_date.Date
+
+relationship 833bb55b-9ae5-2730-d8b4-8ad943e50759
+	fromColumn: fact_snapshots.Date
+	toColumn: dim_date.Date
+
+relationship AutoDetected_477ff3fb-29e6-483b-8878-4c91043b257a
+	isActive: false
+	crossFilteringBehavior: bothDirections
+	fromCardinality: one
+	fromColumn: fact_snapshots.Index
+	toColumn: fact_benchmark.Index
+
+relationship dc2da0af-d1d9-4935-9053-1889361e9f03
+	joinOnDateBehavior: datePartOnly
+	fromColumn: CustomDates.Date
+	toColumn: LocalDateTable_bc787732-7f57-40e4-a8b6-642596ea4087.Date
+
+relationship 282ecd4b-9a45-a384-91ad-4a2f186cbad4
+	fromColumn: Performance.Date
+	toColumn: dim_date.Date
+
+relationship 03d0ea1e-fbf5-468d-982c-395d975bf583
+	joinOnDateBehavior: datePartOnly
+	fromColumn: Drawdown.Date
+	toColumn: LocalDateTable_4a5ec782-5974-45de-bc51-dcea25408905.Date
+
+relationship b1a385af-3a1f-6285-7231-44b0dd248eb2
+	crossFilteringBehavior: bothDirections
+	fromCardinality: one
+	fromColumn: dim_date.Date
+	toColumn: Drawdown.Date
+

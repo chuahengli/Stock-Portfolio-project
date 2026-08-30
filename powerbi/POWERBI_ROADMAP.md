@@ -1,5 +1,21 @@
 # Power BI Learning Roadmap — Stock Portfolio project
 
+## Where you stand (updated 29 Aug 2026)
+
+- Phases 0-2: DONE (checkpoints logged in PowerBI/NOTES.md).
+- Phase 3: DONE. All seven roadmap measures built, plus a lot beyond this
+  roadmap: the window/date-picker system (Period buttons + CustomDates slider +
+  WindowStart/Window End), AsOf variants, portfolio + benchmark volatility with
+  dynamic annualisation, the rebased growth-vs-benchmarks line chart
+  (Performance UNION table + single Growth measure — works with multi-select),
+  and measure 7 Drawdown as a calculated table (Level + running PeakSoFar over
+  the Portfolio series, DrawdownPct = Level/PeakSoFar - 1, window-aware
+  "Drawdown %" line already on Overview). NOTES Checkpoint 3 documents
+  measures 1-13 in your own words.
+- Phase 4: IN PROGRESS. Overview is essentially complete; "Page 2" (Risk) has
+  the vol card + two matrices. See the Phase 4 checklist for what is open.
+- Phase 5: NOT STARTED.
+
 ## Read this first (the deal)
 
 The point of this track is that YOU build the Power BI skill. I (Hermes) build the data
@@ -15,8 +31,10 @@ Ground rules
    Query) instead; hand edits vanish on the next refresh and teach nothing.
 2. Do NOT rename the export files or their columns behind the course's back. The whole
    guide references them by name.
-3. Each phase ends with a Check: send me proof (a screenshot, your written M line, or a
-   one-sentence answer). I review it, then we move on.
+3. Each phase ends with a Check: send me proof (a screenshot saved into
+   powerbi/PowerBI/Media/, your written M line, or a one-sentence answer). I review
+   it, then we move on. Log what you did and learned in powerbi/PowerBI/NOTES.md —
+   that file is yours alone; I never write in it.
 4. Stuck longer than ~20 minutes? Use the Blocker protocol at the bottom.
 5. Exports are generated from the SQLite database. On your Windows machine:
        pipenv run python -m source.export_powerbi
@@ -51,7 +69,7 @@ Deliberately messy (your classroom):
 - Gross_Amount in fact_trades is signed already (BUY negative, SELL positive, options
   x100) — but verifying it yourself is the exercise.
 
-## Phase 0 — setup (one session, ~15-30 min)
+## Phase 0 — setup (one session, ~15-30 min)  [DONE 23 Aug]
 
 1. Install Power BI Desktop (free) from powerbi.microsoft.com/desktop. The free
    Desktop tier is enough for the whole course; a Pro license matters only when you
@@ -64,7 +82,9 @@ Deliberately messy (your classroom):
 Checkpoint 0 (send me): one line saying you can open the Report view, the Data view,
 and the Model view.
 
-## Phase 1 — Get Data + Power Query (the connector skill)
+## Phase 1 — Get Data + Power Query (the connector skill)  [DONE — beyond spec:
+also built the fact_snapshots index-merge for the nav TWR column (same pattern as
+step 6) and the AssetSubclass mapping to fill blank sectors/industries]
 
 Real data is never clean. Interviewers at VSMC will probe exactly this — "what do you
 do with a dirty export?" This phase builds that instinct.
@@ -106,7 +126,11 @@ Checkpoint 1 (send me): (a) screenshot of Power Query left pane with your 7 name
 queries, (b) the M lines you wrote for steps 3 and 5, (c) the most surprising thing
 from steps 4 or 6.
 
-## Phase 2 — the model (star schema, cardinality, interview lore)
+## Phase 2 — the model (star schema, cardinality, interview lore)  [DONE —
+beyond spec: many-to-one safety on dim_date→fact_snapshots, hid noise columns,
+marked dim_date as date table. Later additions in Phase 3: the Performance
+(UNION) and Drawdown calculated tables and their date wiring — logged in
+NOTES Checkpoint 3]
 
 The star structure is in the file naming; your job is to make Power BI believe it.
 
@@ -133,7 +157,9 @@ Checkpoint 2 (send me): Model-view screenshot with all 7 relationships, your
 one-sentence answer to "what does a star schema buy you in a report?", the list of
 hidden columns, and your note on why ^GSPC has no dim_symbol row.
 
-## Phase 3 — DAX (the paycheck skill)
+## Phase 3 — DAX (the paycheck skill)  [DONE — items 1-7 built (numbering
+below is the original plan; your NOTES uses its own order and covers measures
+1-13). All built and screenshot-verified.]
 
 Primer — read once, revisit when measures misbehave:
 - Measure: named formula evaluated in filter context; recomputed as you slice.
@@ -147,10 +173,10 @@ Primer — read once, revisit when measures misbehave:
 Build a new page, drop a few Card visuals, then create these measures. Write them
 wrong on purpose first where told — an error now is a debug skill later.
 
-1. **Total Assets (all history)** = CALCULATE(SUM(fact_snapshots[total_assets]),
+1. **Total Assets (all history)** = CALCULATE(SUM(fact_snapshots[total_assets]),  [DONE]
    ALL(dim_date)). Run it before and after adding the ALL part and watch the card
    change. Understand what ALL did.
-2. **Latest Total Assets** — the classic:
+2. **Latest Total Assets** — the classic:  [DONE — later extended with the window filter]
    Latest Total Assets =
    VAR LatestDay =
        CALCULATE(MAX(dim_date[Date]),
@@ -161,15 +187,17 @@ wrong on purpose first where told — an error now is a debug skill later.
            dim_date[Date] = LatestDay)
    Type it, make it work. Then replace the SUM inside LASTNONBLANK with a literal 1
    and observe (hint: LASTNONBLANK needs a real expression; that's the lesson).
-3. **Income to date** (running total):
+3. **Income to date** (running total):  [DONE — as Dividend and Interest Income All Time]
    Income All Time =
        CALCULATE(SUM(fact_cashflow[Amount]),
-           fact_cashflow[CashflowCategory] = "Investment Income",
+           fact_cashflow[CashflowCategory] = "Dividend Income"),
            FILTER(ALL(dim_date[Date]), dim_date[Date] <= MAX(dim_date[Date])))
    Narrate while typing: "for every selected day I clear the date filter, keep days
    up to this current day, keep only income rows, then sum." This three-part shape is
    the running-total pattern.
-4. **Asset-class weight**:
+4. **Asset-class weight**:  [DONE — evolved into Stocks/Options/Cash Mix + Ratios +
+   AsOf variants, plus Allocation (industry/sector/geography) with DisplaySector /
+   DisplayIndustry fallbacks]
    Total Value = SUM(fact_positions[Market_Value])
    Weight =
        DIVIDE([Total Value],
@@ -177,15 +205,33 @@ wrong on purpose first where told — an error now is a debug skill later.
    First write Weight WITHOUT the CALCULATE/ALL and see it return 100% for every
    slice. Write down why the denominator must see ALL symbols. Note: positions are
    mostly USD; label the measure "USD basis" for honesty.
-5. **Net trade cash flow** = SUM(fact_trades[Gross_Amount]). Slice by Buy_Sell
+5. **Net trade cash flow** = SUM(fact_trades[Gross_Amount]).  [DONE — matrix by
+   Currency x Buy_Sell, column subtotals only so SGD and USD don't mix] Slice by Buy_Sell
    (SELL vs BUY) and read the numbers. This is realized net cash flow, NOT realized
    P/L (true realized P/L needs lot-matching — say this distinction aloud).
-6. **Volatility, annualized** — needs your Phase 1 DailyReturn column:
+6. **Volatility, annualized** — needs your Phase 1 DailyReturn column:  [DONE —
+   symbol-specific via matrix rows; hardcoded SQRT(252) later replaced by your own
+   dynamic N = count/years formula for the sparse portfolio snapshot series.
+   Verified: portfolio ~49% (options-driven) vs ^GSPC ~14%]
    Annualized Vol = STDEVX.P(fact_benchmark, fact_benchmark[DailyReturn]) * SQRT(252)
    But: ^GSPC, ^IXIC, ^FTSE all sit in the same table; a sliced report looks
    wrong. Think what should change to make it index-specific, write your idea down,
    then ask me to review it before changing the code.
-7. **Drawdown (the stretch boss)** — strategy: running peak vs today:
+7. **Drawdown (the stretch boss)** — DONE 29 Aug, by a cleaner route than the
+   scaffold below: a Drawdown CALCULATED TABLE (ADDCOLUMNS over
+   ALL(Performance[Date]); Level = Portfolio level that day; PeakSoFar = max
+   level up to that date; blank-Level rows filtered out), then
+   DrawdownPct = DIVIDE(SUM(Drawdown[Level]), SUM(Drawdown[PeakSoFar])) - 1
+   and a window-aware "Drawdown %" = CALCULATE([DrawdownPct], KEEPFILTERS(
+   window over dim_date)) plotted on Overview. Why the calculated table wins
+   over the inline EARLIER measure: the running peak is materialised once
+   instead of recomputed per point, the window is one reusable wrapper, and
+   future risk measures can build on the same table. One honest caveat: Level
+   for the Portfolio series is raw nav, so a cash deposit can print a new
+   all-time peak — if that ever bothers you, re-base the table on the
+   Time-Weight Return column instead. (The tell-me-what-EARLIER-does exercise
+   retired with this build.)
+   Strategy for reference — running peak vs today:
    Drawdown % =
    VAR CurrentDay = MAX(dim_date[Date])
    VAR Peak =
@@ -198,27 +244,44 @@ wrong on purpose first where told — an error now is a debug skill later.
        )
    RETURN
        DIVIDE(SUM(fact_snapshots[total_assets]) - Peak, Peak)
-   This is the standard drawdown pattern: a running maximum contrasted with the
-   current value. Type it, watch it work, then tell me what EARLIER is doing there.
-   (That last sentence is not rhetorical — the explanation is part of your
-   checkpoint.)
+   Kept for reference only — you already shipped the better calculated-table
+   version above.
 
-Checkpoint 3 (send me): definitions of measures 1,3,4 with your notes, plus the story
-of one wrong number you caused and fixed ("expected X, got Y, culprit Z"). Plus the
-EARLIER explanation and your split of measure 6.
+Checkpoint 3: [DONE — NOTES.md Checkpoint 3 documents measures 1-13, including
+the window rewrite and the Performance/Drawdown architecture decisions.]
 
-## Phase 4 — the report (your taste, applied)
+## Phase 4 — the report (your taste, applied)  [IN PROGRESS — Overview done;
+see checklist]
 
-Pages for a demo (minimum):
+Current pages (verified in the saved .Report JSON 29 Aug):
+- "Overview": Period button slicer, CustomDates slider, Latest Total Assets card,
+  Stocks/Options/Cash Ratio AsOf card, asset-mix line chart, sector + country bar
+  charts, rebased Growth-vs-benchmarks line (Performance legend + Symbol slicer),
+  and the Drawdown % line. Window machinery applies to all of it.
+- "Page 2" (Risk, still needs renaming): portfolio vol card, benchmark vol matrix,
+  net trade cash flow matrix.
+Dark theme registered: Metricalist - Simply Modern Dark.
 
-- Overview: cards (Latest Total Assets, Latest NAV, Income to date, Net trade cash
-  flow, Drawdown), line chart Total assets since inception, date slicer.
-- Allocation: treemap by Symbol, doughnut by AssetClass, bar by Sector.
-- Income & Capital: income by month (line), external capital by month (bar), from
-  CashflowCategory.
-- Risk: drawdown line, rolling 30-day vol (reuse measure 6 after the fix), benchmark
-  daily return filtered to ^GSPC.
-- Trades: the ledger table plus net cash flow by symbol.
+Pages for a demo (minimum), with status:
+
+- Overview: [DONE] Latest Total Assets card, Drawdown % line, growth line,
+  asset-mix line, both date controls. Still homeless: Income to date (measure
+  exists, not on a page yet).
+- Allocation: bar by Sector  [DONE], bar by Country  [DONE]. Still open: treemap by
+  Symbol, doughnut by AssetClass. Decide if both belong on one page with the growth
+  chart or the page splits.
+- Income & Capital:  [NOT STARTED] income by month (line), external capital by month
+  (bar), from CashflowCategory.
+- Risk:  [PARTIAL — vol card + benchmark matrix done; the Drawdown % line lives
+  on Overview] rolling 30-day vol is still unattempted; decide later whether
+  the drawdown line moves here once the page is renamed.
+- Trades:  [PARTIAL — net cash flow matrix done] still open: ledger table + net cash
+  flow by symbol.
+
+Layout hygiene to do before Checkpoint 4: rename "Page 2" to something honest,
+group the window slicers once (the Group 1 box exists but is half-empty), and make
+the Edit-interactions pass deliberate (slicers filter; charts should not cross-filter
+cards).
 
 Design rules (your taste, applied inside Power BI):
 - NO ALL-CAPS in any title, axis, or label — ever.
@@ -235,11 +298,13 @@ Design rules (your taste, applied inside Power BI):
 Checkpoint 4: export to PDF, screenshot every page, send me all, plus one sentence
 about one visual interaction you designed deliberately.
 
-## Phase 5 — refresh, delivery, street cred
+## Phase 5 — refresh, delivery, street cred  [NOT STARTED]
 
 1. Manual refresh: Windows: pipenv run python main.py then
-   pipenv run python -m source.export_powerbi --no-enrich; open the .pbix and
-   Refresh. Done.
+   pipenv run python -m source.export_powerbi --no-enrich; open the .pbip and
+   Refresh. NOTE: your Power Query sources are hardcoded absolute CSV paths
+   (C:\Users\user\Hermes Workspace\...\export\*.csv) — fine on this machine, but
+   that is exactly what the Folder-connector upgrade in step 2 removes.
 2. Folder refresh (pro pattern): switch the 7 Text/CSV queries to ONE Folder
    connector (Get Data > Folder > power_export) — each file remains its own query.
    That is the shape VSMC would use for a daily report.

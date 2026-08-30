@@ -1,0 +1,68 @@
+table Performance
+	lineageTag: d9e4ac7e-9074-4423-8139-39bec11e85b3
+
+	measure Growth =
+			
+			VAR WindowFilter =
+			    FILTER(
+			        ALL(dim_date[Date]),
+			        dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End]
+			    )
+			VAR BaseDay = CALCULATE(MIN(Performance[Date]), WindowFilter)
+			VAR BaseLevel = CALCULATE(SUM(Performance[Level]), dim_date[Date] = BaseDay)
+			RETURN
+			CALCULATE(
+			    DIVIDE(SUM(Performance[Level]), BaseLevel) * 100,
+			    KEEPFILTERS(WindowFilter)
+			)
+		formatString: 0.0
+		lineageTag: bd8f6cc2-a47f-4d3b-ab3c-59217459c9d3
+
+	column Date
+		formatString: General Date
+		lineageTag: 4d003ba5-7530-400c-a43a-cc1bad49edf7
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Date]
+
+		annotation SummarizationSetBy = Automatic
+
+	column Symbol
+		lineageTag: 2140c8df-c0ab-4d30-8393-71f4590e7cc6
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Symbol]
+
+		annotation SummarizationSetBy = Automatic
+
+	column Level
+		lineageTag: 0f73baa9-1fc9-4012-a559-7dc729acf662
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: [Level]
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	partition Performance = calculated
+		mode: import
+		source =
+				
+				UNION(
+				    SELECTCOLUMNS(
+				        fact_snapshots,
+				        "Date", [Date],
+				        "Symbol", "Portfolio",
+				        "Level", [nav]
+				    ),
+				    SELECTCOLUMNS(
+				        fact_benchmark,
+				        "Date", [Date],
+				        "Symbol", [Symbol],
+				        "Level", [Close]
+				    )
+				)
+
+	annotation PBI_Id = 8012084b715d4d3b9bdce011b6b843f2
+

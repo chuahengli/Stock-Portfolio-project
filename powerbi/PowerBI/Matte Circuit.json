@@ -1,0 +1,132 @@
+{
+  "name": "Matte Circuit",
+  "visualStyles": {
+    "page": {
+      "*": {
+        "background": [
+          {
+            "color": { "solid": { "color": "#121214" } },
+            "transparency": 0
+          }
+        ],
+        "outspace": [
+          {
+            "color": { "solid": { "color": "#1E1E22" } }
+          }
+        ]
+      }
+    },
+    "*": {
+      "*": {
+        "outspacePane": [
+          {
+            "backgroundColor": { "solid": { "color": "#1E1E22" } },
+            "foregroundColor": { "solid": { "color": "#C9CBD1" } },
+            "checkboxAndApplyColor": { "solid": { "color": "#D4AF37" } }
+          }
+        ],
+        "filterCard": [
+          {
+            "$id": "Applied",
+            "backgroundColor": { "solid": { "color": "#26262B" } },
+            "foregroundColor": { "solid": { "color": "#C9CBD1" } },
+            "transparency": 0
+          },
+          {
+            "$id": "Available",
+            "backgroundColor": { "solid": { "color": "#1E1E22" } },
+            "foregroundColor": { "solid": { "color": "#C9CBD1" } },
+            "transparency": 0
+          }
+        ],
+        "background": [
+          {
+            "color": { "solid": { "color": "#1A1A1F" } }
+          }
+        ],
+        "border": [
+          {
+            "color": { "solid": { "color": "#2A2A30" } },
+            "show": true,
+            "radius": 5
+          }
+        ],
+        "visualHeader": [
+          {
+            "background": { "solid": { "color": "#1A1A1F" } },
+            "foreground": { "solid": { "color": "#E8E9EC" } },
+            "border": { "solid": { "color": "#2A2A30" } }
+          }
+        ],
+        "visualTooltip": [
+          {
+            "titleFontColor": { "solid": { "color": "#121214" } },
+            "valueFontColor": { "solid": { "color": "#E8E9EC" } },
+            "background": { "solid": { "color": "#26262B" } }
+          }
+        ],
+        "visualHeaderTooltip": [
+          {
+            "titleFontColor": { "solid": { "color": "#121214" } },
+            "background": { "solid": { "color": "#26262B" } }
+          }
+        ]
+      }
+    }
+  },
+  "dataColors": [
+    "#D4AF37",
+    "#8A8F98",
+    "#5B8DEF",
+    "#4CAF8E",
+    "#C56B5C",
+    "#9B8AC4",
+    "#7A7E87",
+    "#B0B4BB",
+    "#3E6B8F",
+    "#6B8F3E",
+    "#8F5B3E",
+    "#5B5F66",
+    "#A67C52",
+    "#4A6FA5",
+    "#7E5BA6",
+    "#52796F",
+    "#8F3E5B",
+    "#3E8F7E",
+    "#8F8A3E",
+    "#523E8F"
+  ],
+  "textClasses": {
+    "label": {
+      "fontFace": "Segoe UI",
+      "color": "#C9CBD1",
+      "fontSize": 9
+    },
+    "callout": {
+      "color": "#E8E9EC",
+      "fontSize": 24
+    },
+    "title": {
+      "color": "#E8E9EC",
+      "fontFace": "Segoe UI",
+      "fontSize": 10
+    },
+    "header": {
+      "color": "#E8E9EC",
+      "fontSize": 10,
+      "fontFace": "Segoe UI"
+    }
+  },
+  "bad": "#C56B5C",
+  "neutral": "#6A6E75",
+  "good": "#4CAF8E",
+  "minimum": "#C56B5C",
+  "center": "#6A6E75",
+  "maximum": "#4CAF8E",
+  "foreground": "#E8E9EC",
+  "foregroundNeutralSecondary": "#C9CBD1",
+  "foregroundNeutralTertiary": "#8A8F98",
+  "backgroundLight": "#26262B",
+  "background": "#121214",
+  "backgroundNeutral": "#3A3A41"
+}

@@ -1,0 +1,48 @@
+expression fact_benchmark_Prev =
+		let
+		    Source = Csv.Document(File.Contents("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export\fact_benchmark.csv"),[Delimiter=",", Columns=3, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+		    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+		    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Date", type date}, {"Symbol", type text}, {"Close", type number}}),
+		    #"Sorted Rows" = Table.Sort(#"Changed Type",{{"Date", Order.Ascending}}),
+		    #"Sorted Rows1" = Table.Sort(#"Sorted Rows",{{"Symbol", Order.Ascending}, {"Date", Order.Ascending}}),
+		    #"Added Index" = Table.AddIndexColumn(#"Sorted Rows1", "Index", 0, 1, Int64.Type),
+		    #"Added Custom" = Table.AddColumn(#"Added Index", "PrevIndex", each [Index] + 1)
+		in
+		    #"Added Custom"
+	lineageTag: 2772db9e-7281-4843-a0ed-716a5936e47b
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+
+expression AssetSubclass =
+		let
+		    Source = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText("fY/LDoIwEEV/pemahQnRuKVYEYVoaEswhMVEGiXyspaFf28RTFQSl3POncncNMVOLGJsYcEQq6AskQstiqHsJM6sFK8iJzSWX2QFujgheusK/RhUsjXGr7VUtXFNDeWnXlO+Md5Vj1Y3L+LZxADmJZ8xn/j8OxaSfo80dY4oXw+ILoVhETXZfmYLe3qJefu+CFcS7p0a2SHwhnJENZCjENRV6lEdx94BqLP86R0ngv1rt5rNpx+QaDdcfLPsCQ==", BinaryEncoding.Base64), Compression.Deflate)), let _t = ((type nullable text) meta [Serialized.Text = true]) in type table [Symbol = _t, AssetSubclass = _t]),
+		    #"Changed Type" = Table.TransformColumnTypes(Source,{{"Symbol", type text}, {"AssetSubclass", type text}})
+		in
+		    #"Changed Type"
+	lineageTag: 178ff9c2-ba8c-449c-9238-4853d955927e
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+
+expression fact_snapshots_prev =
+		let
+		    Source = Csv.Document(File.Contents("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export\fact_snapshots.csv"),[Delimiter=",", Columns=7, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+		    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+		    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Date", type date}, {"total_assets", type number}, {"stocks", type number}, {"options", type number}, {"cash", type number}, {"nav", type number}, {"units", Int64.Type}}),
+		    #"Sorted Rows" = Table.Sort(#"Changed Type",{{"Date", Order.Ascending}}),
+		    #"Added Index" = Table.AddIndexColumn(#"Sorted Rows", "Index", 0, 1, Int64.Type),
+		    #"Removed Columns" = Table.RemoveColumns(#"Added Index",{"total_assets", "stocks", "options", "cash", "units", "Date"}),
+		    #"Added Custom" = Table.AddColumn(#"Removed Columns", "Prev_Index", each [Index] + 1),
+		    #"Changed Type1" = Table.TransformColumnTypes(#"Added Custom",{{"Prev_Index", Int64.Type}}),
+		    #"Renamed Columns" = Table.RenameColumns(#"Changed Type1",{{"nav", "Prev_Nav"}})
+		in
+		    #"Renamed Columns"
+	lineageTag: b65c6722-4d5b-46e9-9127-4ca5ca161dfa
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+
