@@ -21,9 +21,10 @@ moomoo_OpenD_9.6.5618_Windows/
 *.ipynb
 /.ipynb_checkpoints/
 
-# Configuration for Windows Task Scheduler
+# Windows Task Scheduler
 run_daily.bat
 daily_log.txt
+daily_log_prev.txt
 
 # Power BI (generated artifacts - rebuild with source/export_powerbi.py)
 powerbi/export/
