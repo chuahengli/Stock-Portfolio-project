@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
-  "name": "c3050cb6cb3a816067fa",
+  "name": "73a750c0ceac89a2cd82",
   "position": {
-    "x": 0,
-    "y": 480.31847469633288,
-    "z": 2000,
-    "height": 236.9741015743181,
-    "width": 547.84335310191818,
-    "tabOrder": 4000
+    "x": 1.25,
+    "y": 473.75,
+    "z": 6000,
+    "height": 246.25,
+    "width": 288.75,
+    "tabOrder": 6000
   },
   "visual": {
     "visualType": "barChart",
@@ -199,7 +199,7 @@
             "fontSize": {
               "expr": {
                 "Literal": {
-                  "Value": "14D"
+                  "Value": "10D"
                 }
               }
             }
@@ -213,6 +213,32 @@
               "expr": {
                 "Literal": {
                   "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "border": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "subTitle": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "10D"
                 }
               }
             }

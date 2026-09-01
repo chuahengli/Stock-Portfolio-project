@@ -78,7 +78,7 @@ table fact_benchmark
 		mode: import
 		source =
 				let
-				    Source = Csv.Document(File.Contents("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export\fact_benchmark.csv"),[Delimiter=",", Columns=3, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+				    Source = Csv.Document(Folder.Files("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export"){[Name="fact_benchmark.csv"]}[Content],[Delimiter=",", Columns=3, Encoding=65001, QuoteStyle=QuoteStyle.None]),
 				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
 				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Date", type date}, {"Symbol", type text}, {"Close", type number}}),
 				    #"Sorted Rows" = Table.Sort(#"Changed Type",{{"Date", Order.Ascending}}),

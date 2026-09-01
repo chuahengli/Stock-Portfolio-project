@@ -9,7 +9,7 @@ Usage (from the project root):
     pipenv run python -m source.export_powerbi --no-enrich  # offline-safe, cache only
 
 Output: powerbi/export/{dim_date,dim_symbol,fact_snapshots,fact_positions,
-fact_cashflow,fact_trades,fact_benchmark}.csv  (7 files, utf-8-sig/BOM)
+fact_cashflow,fact_trades,fact_benchmark,fact_prices}.csv  (8 files, utf-8-sig/BOM)
 
 Why this file exists:
     Power BI Desktop connects to these CSVs (Get Data > Text/CSV, one file at a
@@ -41,7 +41,7 @@ OPTION_RE = re.compile(r"^([A-Z]+)(\d{2})(\d{2})(\d{2})([CP])(\d+)$")
 
 CONTRACT_FILES = [
     "dim_date", "dim_symbol", "fact_snapshots", "fact_positions",
-    "fact_cashflow", "fact_trades", "fact_benchmark",
+    "fact_cashflow", "fact_trades", "fact_benchmark", "fact_prices",
 ]
 
 
@@ -382,6 +382,28 @@ def build_fact_benchmark(conn: sqlite3.Connection, inception: str) -> pd.DataFra
         "WHERE substr(Date,1,10) >= ? ORDER BY Date, Symbol",
         conn, params=(inception,),
     )
+    # Dedupe: one row per (Date, Symbol). Legacy timestamped PK rows ('... 00:00:00')
+    # collapse onto their bare-date twin here; the non-null Close wins, so an
+    # all-NULL leftover row can never blank the CSV day (bit 2026-09-01: NULL
+    # ^GSPC/^IXIC 08-28 row killed two return days per index downstream).
+    df = (df.sort_values(["Date", "Symbol", "Close"], na_position="last")
+            .drop_duplicates(subset=["Date", "Symbol"], keep="last"))
+    return df[["Date", "Symbol", "Close"]]
+
+
+def build_fact_prices(conn: sqlite3.Connection, inception: str) -> pd.DataFrame:
+    # Per-symbol daily closes for everything ever held. Windowed to the tracked
+    # period (yfinance backfills 'max' -- e.g. 40y of KO would swamp the CSVs);
+    # scoping to current holdings happens in DAX, not here, so the file stays
+    # stable when positions change. Same dedupe guard as build_fact_benchmark:
+    # if this table ever grows timestamped PK rows again they collapse cleanly.
+    df = pd.read_sql_query(
+        "SELECT Symbol, substr(Date,1,10) AS Date, Close FROM symbol_price_history "
+        "WHERE substr(Date,1,10) >= ? ORDER BY Date, Symbol",
+        conn, params=(inception,),
+    )
+    df = (df.sort_values(["Date", "Symbol", "Close"], na_position="last")
+            .drop_duplicates(subset=["Date", "Symbol"], keep="last"))
     return df[["Date", "Symbol", "Close"]]
 
 
@@ -413,6 +435,7 @@ def run(allow_network: bool = True) -> int:
         "fact_cashflow": build_fact_cashflow(conn),
         "fact_trades": build_fact_trades(conn),
         "fact_benchmark": build_fact_benchmark(conn, inception),
+        "fact_prices": build_fact_prices(conn, inception),
     }
 
     for name in CONTRACT_FILES:

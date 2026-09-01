@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "7689ca8b1489cca44283",
   "position": {
-    "x": 414.21017174999076,
-    "y": 1.7701289391025246,
+    "x": 258.75,
+    "y": 57.5,
     "z": 1000,
-    "height": 77.885673320511074,
-    "width": 738.14376760575271,
+    "height": 111.25,
+    "width": 716.25,
     "tabOrder": 1000
   },
   "visual": {
@@ -20,28 +20,14 @@
                 "Measure": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "fact_snapshots"
+                      "Entity": "Measures Table"
                     }
                   },
-                  "Property": "Portfolio Volatility"
+                  "Property": "Beta (vs S&P500)"
                 }
               },
-              "queryRef": "fact_snapshots.Portfolio annualized volatility",
-              "nativeQueryRef": "Portfolio Volatility"
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Drawdown"
-                    }
-                  },
-                  "Property": "Max Drawdown"
-                }
-              },
-              "queryRef": "Drawdown.Max Drawdown",
-              "nativeQueryRef": "Max Drawdown"
+              "queryRef": "Measures Table.Beta (vs S&P500)",
+              "nativeQueryRef": "Beta (vs S&P500)"
             },
             {
               "field": {
@@ -51,11 +37,53 @@
                       "Entity": "Measures Table"
                     }
                   },
-                  "Property": "Beta (vs S&P500)"
+                  "Property": "Sharpe Ratio"
                 }
               },
-              "queryRef": "Measures Table.Beta (vs S&P500)",
-              "nativeQueryRef": "Beta (vs S&P500)"
+              "queryRef": "Measures Table.Sharpe Ratio",
+              "nativeQueryRef": "Sharpe Ratio"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Measures Table"
+                    }
+                  },
+                  "Property": "Sortino Ratio"
+                }
+              },
+              "queryRef": "Measures Table.Sortino Ratio",
+              "nativeQueryRef": "Sortino Ratio"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Measures Table"
+                    }
+                  },
+                  "Property": "Calmar Ratio"
+                }
+              },
+              "queryRef": "Measures Table.Calmar Ratio",
+              "nativeQueryRef": "Calmar Ratio"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Measures Table"
+                    }
+                  },
+                  "Property": "Information Ratio"
+                }
+              },
+              "queryRef": "Measures Table.Information Ratio",
+              "nativeQueryRef": "Information Ratio"
             }
           ]
         }
@@ -67,10 +95,10 @@
               "Measure": {
                 "Expression": {
                   "SourceRef": {
-                    "Entity": "fact_snapshots"
+                    "Entity": "Measures Table"
                   }
                 },
-                "Property": "Portfolio Volatility"
+                "Property": "Beta (vs S&P500)"
               }
             },
             "direction": "Descending"
@@ -86,7 +114,7 @@
             "fontSize": {
               "expr": {
                 "Literal": {
-                  "Value": "20D"
+                  "Value": "10D"
                 }
               }
             }
@@ -109,7 +137,21 @@
             "fixedWidth": {
               "expr": {
                 "Literal": {
-                  "Value": "200L"
+                  "Value": "170L"
+                }
+              }
+            },
+            "orientation": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            },
+            "fixedHeight": {
+              "expr": {
+                "Literal": {
+                  "Value": "50L"
                 }
               }
             }
@@ -129,7 +171,7 @@
             "fontSize": {
               "expr": {
                 "Literal": {
-                  "Value": "14D"
+                  "Value": "10D"
                 }
               }
             }
@@ -181,6 +223,21 @@
           },
           "selector": {
             "id": "default"
+          }
+        }
+      ]
+    },
+    "visualContainerObjects": {
+      "border": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
           }
         }
       ]
@@ -242,48 +299,6 @@
           ]
         },
         "howCreated": "User"
-      },
-      {
-        "name": "566b57ad0659dca4e895",
-        "field": {
-          "Measure": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "fact_snapshots"
-              }
-            },
-            "Property": "Portfolio Volatility"
-          }
-        },
-        "type": "Advanced"
-      },
-      {
-        "name": "ca821743703ab6071155",
-        "field": {
-          "Measure": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "Drawdown"
-              }
-            },
-            "Property": "Max Drawdown"
-          }
-        },
-        "type": "Advanced"
-      },
-      {
-        "name": "9709592f4e5bdb79b553",
-        "field": {
-          "Measure": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "Measures Table"
-              }
-            },
-            "Property": "Beta (vs S&P500)"
-          }
-        },
-        "type": "Advanced"
       }
     ]
   }

@@ -58,3 +58,16 @@ relationship b1a385af-3a1f-6285-7231-44b0dd248eb2
 	fromColumn: dim_date.Date
 	toColumn: Drawdown.Date
 
+relationship AutoDetected_8d6d2957-9cd9-4174-8422-ec4ae60b003a
+	fromColumn: fact_prices.Symbol
+	toColumn: dim_symbol.Symbol
+
+relationship 5d14909e-efb2-7d8e-a70f-c9ff87faf0d5
+	fromColumn: fact_prices.Date
+	toColumn: dim_date.Date
+
+relationship 15987a14-bc26-4e9a-bbde-9e252134a26a
+	joinOnDateBehavior: datePartOnly
+	fromColumn: CurrentHoldings.Date
+	toColumn: LocalDateTable_97d2c3a4-464d-4447-883b-02a583a2e6b2.Date
+

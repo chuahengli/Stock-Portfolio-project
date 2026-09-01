@@ -135,7 +135,7 @@ table fact_trades
 		mode: import
 		source =
 				let
-				    Source = Csv.Document(File.Contents("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export\fact_trades.csv"),[Delimiter=",", Columns=12, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+				    Source = Csv.Document(Folder.Files("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export"){[Name="fact_trades.csv"]}[Content],[Delimiter=",", Columns=12, Encoding=65001, QuoteStyle=QuoteStyle.None]),
 				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
 				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Order_ID", type text}, {"date_time", type datetime}, {"Date", type date}, {"Symbol", type text}, {"Name", type text}, {"Market", type text}, {"Buy_Sell", type text}, {"Quantity", type number}, {"Fill_Price", type number}, {"Multiplier", Int64.Type}, {"Gross_Amount", type number}, {"Currency", type text}}),
 				    #"Add Is_Trade Column" = Table.AddColumn(#"Changed Type", "Is_Trade", each [Quantity] <> 0 and [Fill_Price] <> 0, type logical)

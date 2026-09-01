@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "c91e13b0d1d444389ab9",
   "position": {
-    "x": 1357.6888962916364,
-    "y": 79.655802259613608,
+    "x": 975,
+    "y": 135,
     "z": 3000,
-    "height": 164.62199133653479,
-    "width": 562.90100263460283,
+    "height": 93.75,
+    "width": 305,
     "tabOrder": 3000
   },
   "visual": {
@@ -66,7 +66,7 @@
             "endDate": {
               "expr": {
                 "Literal": {
-                  "Value": "datetime'2026-08-27T00:00:00'"
+                  "Value": "datetime'2026-09-01T00:00:00'"
                 }
               }
             },
@@ -93,7 +93,7 @@
             "textSize": {
               "expr": {
                 "Literal": {
-                  "Value": "12D"
+                  "Value": "8D"
                 }
               }
             },
@@ -113,7 +113,7 @@
             "textSize": {
               "expr": {
                 "Literal": {
-                  "Value": "12D"
+                  "Value": "8D"
                 }
               }
             }
@@ -190,7 +190,7 @@
                             },
                             "Right": {
                               "Literal": {
-                                "Value": "datetime'2026-08-28T00:00:00'"
+                                "Value": "datetime'2026-09-02T00:00:00'"
                               }
                             }
                           }
@@ -199,6 +199,19 @@
                     }
                   }
                 ]
+              }
+            }
+          }
+        }
+      ],
+      "pendingChangesIcon": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
               }
             }
           }
@@ -212,7 +225,7 @@
             "show": {
               "expr": {
                 "Literal": {
-                  "Value": "true"
+                  "Value": "false"
                 }
               }
             },
@@ -250,6 +263,32 @@
             }
           }
         }
+      ],
+      "visualHeader": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "border": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
       ]
     },
     "syncGroup": {
@@ -258,23 +297,5 @@
       "filterChanges": true
     },
     "drillFilterOtherVisuals": true
-  },
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "1e789387bc6e10ba0065",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "CustomDates"
-              }
-            },
-            "Property": "Date"
-          }
-        },
-        "type": "Categorical"
-      }
-    ]
   }
 }

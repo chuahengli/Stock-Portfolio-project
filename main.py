@@ -126,7 +126,11 @@ def update_db(snapshot_df: pd.DataFrame, positions_df: pd.DataFrame, cashflow: p
     indices_dict = db.indices_dict()
     for index_name, ticker in indices_dict.items():
         db.update_indices(ticker)
-    
+
+    # Price history for every stock ever held (backfills on first sighting,
+    # tops up 1mo afterwards) -- feeds the correlation work in Power BI.
+    db.update_symbol_prices_for_positions()
+
     return 0
 
 

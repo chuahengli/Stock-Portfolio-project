@@ -1,0 +1,140 @@
+table CurrentHoldings
+	lineageTag: a7fe2edf-6d69-444a-8898-a8a2d07fc5b5
+
+	column Symbol
+		lineageTag: 54a99d2f-1eb3-4381-a0df-848f49046fea
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: fact_positions[Symbol]
+
+		annotation SummarizationSetBy = Automatic
+
+	column Date
+		formatString: General Date
+		lineageTag: 88b880e9-e167-4f55-a61a-a65ff265029a
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: fact_positions[Date]
+
+		variation Variation
+			isDefault
+			relationship: 15987a14-bc26-4e9a-bbde-9e252134a26a
+			defaultHierarchy: LocalDateTable_97d2c3a4-464d-4447-883b-02a583a2e6b2.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+	column Name
+		lineageTag: f6388723-b56a-49cc-a5dd-2085073f0290
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: fact_positions[Name]
+
+		annotation SummarizationSetBy = Automatic
+
+	column Market
+		lineageTag: 0a8bde62-5316-4bab-9cbf-ba2bd1917590
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: fact_positions[Market]
+
+		annotation SummarizationSetBy = Automatic
+
+	column Quantity
+		lineageTag: d8b0597c-4ded-4b43-9238-b883090140a7
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: fact_positions[Quantity]
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column Market_Value
+		lineageTag: b5f0aaed-a587-410b-912f-c816cb422c8e
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: fact_positions[Market_Value]
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column Diluted_Cost
+		lineageTag: a8378e99-f8a8-46d3-94cb-d7a7559c59aa
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: fact_positions[Diluted_Cost]
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column Price
+		lineageTag: ab114b74-5c9b-442c-9027-c88f376da9ac
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: fact_positions[Price]
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column 'P/L %'
+		formatString: 0.00%;-0.00%;0.00%
+		lineageTag: 365bd020-9cb8-463e-9f66-be36155d7f94
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: fact_positions[P/L %]
+
+		annotation SummarizationSetBy = Automatic
+
+	column P/L
+		lineageTag: faa17a8b-54e1-47d4-afba-b3647c89947a
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: fact_positions[P/L]
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column 'Today''s P/L'
+		lineageTag: df100ba9-989f-4a27-8b21-a0a0c0dbdf59
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: fact_positions[Today's P/L]
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column Currency
+		lineageTag: e2a33f59-e0ac-4d34-bebf-3ad45db289d2
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: fact_positions[Currency]
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Portfolio %'
+		formatString: 0.00%;-0.00%;0.00%
+		lineageTag: affc5e9c-a78e-4db6-a3b4-69bd828cc8d3
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: fact_positions[Portfolio %]
+
+		annotation SummarizationSetBy = Automatic
+
+	partition CurrentHoldings = calculated
+		mode: import
+		source =
+				
+				VAR LastDay = CALCULATE(MAX(fact_positions[Date]), ALL(dim_symbol))
+				RETURN
+				    CALCULATETABLE(
+				        fact_positions,
+				        fact_positions[Date] = LastDay
+				    )
+
+	annotation PBI_Id = 3fa5975755a64ac48c236821a15b5217
+

@@ -13,8 +13,12 @@
 
 - Command: `pipenv run python -m source.export_powerbi` (add `--no-enrich` to skip
   yahoo sector/industry lookups; the daily batch uses `--no-enrich`).
-- Seven CSV files exported: dim_date, dim_symbol, fact_snapshots, fact_positions,
-  fact_cashflow, fact_trades, fact_benchmark.
+- Eight CSV files exported: dim_date, dim_symbol, fact_snapshots, fact_positions,
+  fact_cashflow, fact_trades, fact_benchmark, fact_prices.
+- `fact_prices` grain: one Close per ever-held equity per market day, windowed to
+  snapshot inception; columns `Date, Symbol, Close`. Sourced from
+  `symbol_price_history` (yfinance, auto-adjusted), refreshed by the daily batch
+  (`update_symbol_prices_for_positions` in main.py update_db).
 - `powerbi/symbol_meta.json` caches yfinance sector/industry (regenerable,
   gitignored).
 

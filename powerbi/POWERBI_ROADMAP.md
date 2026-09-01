@@ -1,20 +1,54 @@
 # Power BI Learning Roadmap — Stock Portfolio project
 
-## Where you stand (updated 29 Aug 2026)
+> Project status: **ALL PHASES COMPLETE** (Phases 0–5, finished 1 Sep 2026).
+> Remaining open items: TE/IR N≥20 floor decision, optional Phase 6 design.
+> This file is the course contract + archive. The learning journal lives in
+> `PowerBI/NOTES.md` (user-owned).
 
-- Phases 0-2: DONE (checkpoints logged in PowerBI/NOTES.md).
-- Phase 3: DONE. All seven roadmap measures built, plus a lot beyond this
-  roadmap: the window/date-picker system (Period buttons + CustomDates slider +
-  WindowStart/Window End), AsOf variants, portfolio + benchmark volatility with
-  dynamic annualisation, the rebased growth-vs-benchmarks line chart
-  (Performance UNION table + single Growth measure — works with multi-select),
-  and measure 7 Drawdown as a calculated table (Level + running PeakSoFar over
-  the Portfolio series, DrawdownPct = Level/PeakSoFar - 1, window-aware
-  "Drawdown %" line already on Overview). NOTES Checkpoint 3 documents
-  measures 1-13 in your own words.
-- Phase 4: IN PROGRESS. Overview is essentially complete; "Page 2" (Risk) has
-  the vol card + two matrices. See the Phase 4 checklist for what is open.
-- Phase 5: NOT STARTED.
+## Where you stand (updated 1 Sep 2026)
+
+| Phase | Topic | Status |
+| ----- | ----- | ------ |
+| 0 | Setup | DONE 23 Aug |
+| 1 | Get Data + Power Query | DONE (beyond spec: TWR index-merge, AssetSubclass mapping) |
+| 2 | The Model (star schema) | DONE (beyond spec: m:1 safety, noise hiding, date-table marking) |
+| 3 | DAX | DONE (roadmap measures 1–7 + 6 more, window system, QA'd vs Python targets) |
+| 4 | The Report | DONE (3 pages: Overview, Risks, Trades; heatmap, histogram, treemap shipped 1 Sep) |
+| 5 | Refresh & Delivery | DONE (Folder-connector swap, PDF export; Service publish declined by choice) |
+
+Open decisions / optional next steps:
+
+- TE/IR on the 1M tile print noise (paired N=5 clears the N<2 floor). Fix is a
+  one-line floor raise to N≥20 in both measures — do it whenever it bothers you.
+- Phase 6 candidates (design together when wanted): research-folder tickers,
+  FX snapshots, an RLS drill, SQLite via ODBC.
+- User decisions on record (do not re-suggest): rolling 30-day vol (30 Aug),
+  Top-5 weight / concentration (31 Aug), Income & Capital page (1 Sep),
+  Power BI Service publish (1 Sep).
+
+## Folder map
+
+```
+powerbi/
+├── POWERBI_ROADMAP.md          this file — course contract + archive
+├── verify_export.py            CSV contract checker (columns, BOM) — run from project root
+├── verify_te_ir.py             Python replication of TE/IR DAX for QA targets
+├── symbol_meta.json            yfinance sector/industry cache (gitignored, regenerable)
+├── export/                     8 star-schema CSVs — GENERATED, never hand-edit
+│   ├── dim_date.csv  dim_symbol.csv
+│   ├── fact_snapshots.csv  fact_positions.csv  fact_cashflow.csv
+│   ├── fact_trades.csv  fact_benchmark.csv  fact_prices.csv
+└── PowerBI/                    the PBIP project (open Stock Portfolio PowerBI.pbip)
+    ├── NOTES.md                learning journal — USER-owned, agent never writes it
+    ├── Media/                  checkpoint screenshots + final PDF export
+    ├── Matte Circuit.json / Metricalist - Simply Modern Dark.json   themes
+    ├── Stock Portfolio PowerBI.Report/          report definition (PBIP/TMDL)
+    └── Stock Portfolio PowerBI.SemanticModel/   model + DAX definition (PBIP/TMDL)
+```
+
+PBIP note: Report/ and SemanticModel/ definitions ARE committed (that is the
+point of PBIP). Machine-local files are NOT: `**/.pbi/`, `StaticResources/`,
+`*.abf`.
 
 ## Read this first (the deal)
 
@@ -32,8 +66,8 @@ Ground rules
 2. Do NOT rename the export files or their columns behind the course's back. The whole
    guide references them by name.
 3. Each phase ends with a Check: send me proof (a screenshot saved into
-   powerbi/PowerBI/Media/, your written M line, or a one-sentence answer). I review
-   it, then we move on. Log what you did and learned in powerbi/PowerBI/NOTES.md —
+   `PowerBI/Media/`, your written M line, or a one-sentence answer). I review
+   it, then we move on. Log what you did and learned in `PowerBI/NOTES.md` —
    that file is yours alone; I never write in it.
 4. Stuck longer than ~20 minutes? Use the Blocker protocol at the bottom.
 5. Exports are generated from the SQLite database. On your Windows machine:
@@ -52,6 +86,7 @@ Ground rules
 | fact_cashflow   | one row per cash-flow event      | Date, Currency, Type, in_out, Amount, Remark, is_external, is_income, CashflowCategory
 | fact_trades     | one row per filled order         | date_time, Date, Symbol, Market, Buy_Sell, Quantity, Fill_Price, Multiplier, Gross_Amount, Currency
 | fact_benchmark  | one row per index per day (windowed) | Date, Symbol, Close
+| fact_prices     | one row per ever-held equity per market day (windowed) | Date, Symbol, Close
 
 Conventions: every fact table has a Date column formatted YYYY-MM-DD. Files are UTF-8
 with BOM, which is why they open cleanly in Excel and Power BI. Amounts stay in
@@ -69,7 +104,15 @@ Deliberately messy (your classroom):
 - Gross_Amount in fact_trades is signed already (BUY negative, SELL positive, options
   x100) — but verifying it yourself is the exercise.
 
-## Phase 0 — setup (one session, ~15-30 min)  [DONE 23 Aug]
+---
+
+# The phases (archive + exercises)
+
+Phases 0–5 are complete. Each phase below keeps: its original exercises (worth
+re-reading — they encode the why), the checkpoint definition, and a short
+outcome note on what was actually built.
+
+## Phase 0 — setup (one session, ~15-30 min) — DONE 23 Aug
 
 1. Install Power BI Desktop (free) from powerbi.microsoft.com/desktop. The free
    Desktop tier is enough for the whole course; a Pro license matters only when you
@@ -82,9 +125,12 @@ Deliberately messy (your classroom):
 Checkpoint 0 (send me): one line saying you can open the Report view, the Data view,
 and the Model view.
 
-## Phase 1 — Get Data + Power Query (the connector skill)  [DONE — beyond spec:
-also built the fact_snapshots index-merge for the nav TWR column (same pattern as
-step 6) and the AssetSubclass mapping to fill blank sectors/industries]
+## Phase 1 — Get Data + Power Query (the connector skill) — DONE, beyond spec
+
+> Outcome: all exercises completed; also built the fact_snapshots index-merge for
+> the nav TWR column (same pattern as step 6) and the AssetSubclass mapping to
+> fill blank sectors/industries. Sources later upgraded to the Folder connector
+> (Phase 5) — keep that in mind when reading "Text/CSV" below.
 
 Real data is never clean. Interviewers at VSMC will probe exactly this — "what do you
 do with a dirty export?" This phase builds that instinct.
@@ -126,11 +172,12 @@ Checkpoint 1 (send me): (a) screenshot of Power Query left pane with your 7 name
 queries, (b) the M lines you wrote for steps 3 and 5, (c) the most surprising thing
 from steps 4 or 6.
 
-## Phase 2 — the model (star schema, cardinality, interview lore)  [DONE —
-beyond spec: many-to-one safety on dim_date→fact_snapshots, hid noise columns,
-marked dim_date as date table. Later additions in Phase 3: the Performance
-(UNION) and Drawdown calculated tables and their date wiring — logged in
-NOTES Checkpoint 3]
+## Phase 2 — the model (star schema, cardinality, interview lore) — DONE, beyond spec
+
+> Outcome: all 7 relationships built; many-to-one safety on dim_date→fact_snapshots;
+> noise columns hidden; dim_date marked as date table. Later additions in Phase 3:
+> the Performance (UNION) and Drawdown calculated tables and their date wiring —
+> logged in NOTES Checkpoint 3.
 
 The star structure is in the file naming; your job is to make Power BI believe it.
 
@@ -157,9 +204,16 @@ Checkpoint 2 (send me): Model-view screenshot with all 7 relationships, your
 one-sentence answer to "what does a star schema buy you in a report?", the list of
 hidden columns, and your note on why ^GSPC has no dim_symbol row.
 
-## Phase 3 — DAX (the paycheck skill)  [DONE — items 1-7 built (numbering
-below is the original plan; your NOTES uses its own order and covers measures
-1-13). All built and screenshot-verified.]
+## Phase 3 — DAX (the paycheck skill) — DONE, beyond spec
+
+> Outcome: original measures 1–7 built, plus six more beyond the roadmap
+> (measures 8–13 in NOTES): the window/date-picker system (Period buttons +
+> CustomDates slider + WindowStart/Window End), AsOf variants, portfolio +
+> benchmark volatility with dynamic annualisation, the rebased
+> growth-vs-benchmarks line chart (Performance UNION table + single Growth
+> measure, works with multi-select), and the Drawdown calculated table.
+> Full DAX + reasoning in NOTES Checkpoint 3. All card numbers QA-verified
+> against Python-recomputed targets (verify_te_ir.py) on 31 Aug.
 
 Primer — read once, revisit when measures misbehave:
 - Measure: named formula evaluated in filter context; recomputed as you slice.
@@ -247,73 +301,50 @@ wrong on purpose first where told — an error now is a debug skill later.
    Kept for reference only — you already shipped the better calculated-table
    version above.
 
-Checkpoint 3: [DONE — NOTES.md Checkpoint 3 documents measures 1-13, including
-the window rewrite and the Performance/Drawdown architecture decisions.]
+Checkpoint 3: DONE — NOTES.md Checkpoint 3 documents measures 1-13, including
+the window rewrite and the Performance/Drawdown architecture decisions.
 
-## Phase 4 — the report (your taste, applied)  [IN PROGRESS — Overview done;
-see checklist]
+## Phase 4 — the report (your taste, applied) — DONE 1 Sep
 
-Current pages (verified in the saved .Report JSON 29 Aug):
+> Outcome: three pages shipped (Overview, Risks, Trades), all normalized to
+> 1280x720 canvas. Risks carries the full risk stack: portfolio + benchmark vol,
+> Max Drawdown, Beta vs ^GSPC, Sharpe (4% rf), Sortino, Historical VaR 95%,
+> Expected Shortfall 95%, Calmar, Tracking Error, Information Ratio, correlation
+> heatmap, daily-returns histogram, symbol allocation treemap. Allocation merged
+> into Risks (user decision); Income & Capital page declined (user decision).
+> Layout + per-visual detail: NOTES Phase 4 section + Checkpoint 4 evidence.
+
+Current pages (verified in the saved .Report JSON):
 - "Overview": Period button slicer, CustomDates slider, Latest Total Assets card,
   Stocks/Options/Cash Ratio AsOf card, asset-mix line chart, sector + country bar
   charts, rebased Growth-vs-benchmarks line (Performance legend + Symbol slicer),
   and the Drawdown % line. Window machinery applies to all of it.
-- "Page 2" (Risk, still needs renaming): portfolio vol card, benchmark vol matrix,
-  net trade cash flow matrix.
-Dark theme registered: Metricalist - Simply Modern Dark.
+- "Risks": the measure cards, benchmark vol matrix, correlation heatmap, drawdown
+  area chart, allocation bars, histogram, treemap.
+- "Trades": Trading Ledger table, Net Trade Cash Flow matrix, Period buttons,
+  CustomDates slicer.
+Dark theme registered: Metricalist - Simply Modern Dark (+ Matte Circuit.json).
 
-Pages for a demo (minimum), with status:
+Checkpoint 4: DONE — screenshots of every page in Media/, PDF exported (Phase 5).
 
-- Overview: [DONE] Latest Total Assets card, Drawdown % line, growth line,
-  asset-mix line, both date controls. Still homeless: Income to date (measure
-  exists, not on a page yet).
-- Allocation: bar by Sector  [DONE], bar by Country  [DONE]. Still open: treemap by
-  Symbol, doughnut by AssetClass. Decide if both belong on one page with the growth
-  chart or the page splits.
-- Income & Capital:  [NOT STARTED] income by month (line), external capital by month
-  (bar), from CashflowCategory.
-- Risk:  [PARTIAL — vol card + benchmark matrix done; the Drawdown % line lives
-  on Overview] rolling 30-day vol is still unattempted; decide later whether
-  the drawdown line moves here once the page is renamed.
-- Trades:  [PARTIAL — net cash flow matrix done] still open: ledger table + net cash
-  flow by symbol.
+## Phase 5 — refresh, delivery, street cred — DONE 1 Sep
 
-Layout hygiene to do before Checkpoint 4: rename "Page 2" to something honest,
-group the window slicers once (the Group 1 box exists but is half-empty), and make
-the Edit-interactions pass deliberate (slicers filter; charts should not cross-filter
-cards).
+> Outcome:
+> 1. Manual refresh loop proven: `pipenv run python main.py` (host-side, needs
+>    OpenD) → `pipenv run python -m source.export_powerbi --no-enrich` → Refresh
+>    in Desktop. Verified end-to-end in the sandbox (all 8 CSVs regenerated).
+> 2. Folder refresh SHIPPED: all queries (8 main + prev-day helpers) now source
+>    via `Folder.Files(…){[Name="file.csv"]}[Content]` — zero hardcoded absolute
+>    paths left in the model. The combine-free shape kept: each file remains its
+>    own query. This is the shape VSMC would use for a daily report.
+> 3. Power BI Service: DECLINED by user decision — PDF export is the delivery
+>    artifact instead (Media/Stock Portfolio PowerBI pdf Export.pdf, linked from
+>    NOTES Phase 5).
+> 4. Optional later: SQLite directly via ODBC (System DSN) — ask when wanted.
+> 5. PDF into the Portfolio Site assets folder later (separate existing pipeline).
 
-Design rules (your taste, applied inside Power BI):
-- NO ALL-CAPS in any title, axis, or label — ever.
-- Quiet palette: dark theme if you like (View > Themes or custom JSON); slate panels,
-  silver text. Gold accent #D4AF37 on exactly ONE interactive element, nothing else.
-- Delete gridlines and borders. Formats: "0.0%" for percents, "$ #,##0.00" for
-  money, thousands separators.
-- Wire the date slicer to the Overview first; then use the Visual interactions
-  pane (Format > Edit interactions) so a click on another chart doesn't wipe the
-  cards. Explore the interaction controls — that's a superpower.
-- QA drill: set the slicer to 2026-08-17 and confirm Total in the card equals the
-  fact_snapshots row. If it doesn't, find why. This instinct IS the interview test.
-
-Checkpoint 4: export to PDF, screenshot every page, send me all, plus one sentence
-about one visual interaction you designed deliberately.
-
-## Phase 5 — refresh, delivery, street cred  [NOT STARTED]
-
-1. Manual refresh: Windows: pipenv run python main.py then
-   pipenv run python -m source.export_powerbi --no-enrich; open the .pbip and
-   Refresh. NOTE: your Power Query sources are hardcoded absolute CSV paths
-   (C:\Users\user\Hermes Workspace\...\export\*.csv) — fine on this machine, but
-   that is exactly what the Folder-connector upgrade in step 2 removes.
-2. Folder refresh (pro pattern): switch the 7 Text/CSV queries to ONE Folder
-   connector (Get Data > Folder > power_export) — each file remains its own query.
-   That is the shape VSMC would use for a daily report.
-3. Power BI Service: with a work/school account, publish, schedule refresh, learn
-   what a gateway is. That is the enterprise half of the skill.
-4. Optional street cred later: SQLite directly via ODBC (System DSN). Ask me when
-   you want that phase.
-5. If you want, export the PDF into the Portfolio Site assets folder later (that is
-   a separate existing pipeline).
+The original step-by-step is preserved above in the outcome notes; re-read it if
+re-building from scratch.
 
 ## VSMC pacing answer (when they ask "how long to pick it up?")
 
@@ -346,6 +377,5 @@ Table.Merge + Table.ExpandTableColumn.
 DAX: CALCULATE, FILTER, ALL, ALLSELECTED, VALUES, SUM, SUMX, STDEVX.P, FIRSTDATE,
 LASTDATE, LASTNONBLANK, MAX/MIN, DIVIDE, SELECTEDVALUE, VAR/RETURN.
 
-Re-read the phase header before each phase; sequences ARE the order. When you finish
-Checkpoint 4, we design phase 6 together (research-folder tickers, FX snapshots, or
-an RLS drill) — your call.
+Phase 6 (when wanted): research-folder tickers, FX snapshots, or an RLS drill —
+your call.

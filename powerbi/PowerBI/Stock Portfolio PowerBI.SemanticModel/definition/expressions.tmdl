@@ -1,6 +1,6 @@
 expression fact_benchmark_Prev =
 		let
-		    Source = Csv.Document(File.Contents("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export\fact_benchmark.csv"),[Delimiter=",", Columns=3, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+		    Source = Csv.Document(Folder.Files("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export"){[Name="fact_benchmark.csv"]}[Content],[Delimiter=",", Columns=3, Encoding=65001, QuoteStyle=QuoteStyle.None]),
 		    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
 		    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Date", type date}, {"Symbol", type text}, {"Close", type number}}),
 		    #"Sorted Rows" = Table.Sort(#"Changed Type",{{"Date", Order.Ascending}}),
@@ -29,7 +29,7 @@ expression AssetSubclass =
 
 expression fact_snapshots_prev =
 		let
-		    Source = Csv.Document(File.Contents("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export\fact_snapshots.csv"),[Delimiter=",", Columns=7, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+		    Source = Csv.Document(Folder.Files("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export"){[Name="fact_snapshots.csv"]}[Content],[Delimiter=",", Columns=7, Encoding=65001, QuoteStyle=QuoteStyle.None]),
 		    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
 		    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Date", type date}, {"total_assets", type number}, {"stocks", type number}, {"options", type number}, {"cash", type number}, {"nav", type number}, {"units", Int64.Type}}),
 		    #"Sorted Rows" = Table.Sort(#"Changed Type",{{"Date", Order.Ascending}}),
@@ -41,6 +41,17 @@ expression fact_snapshots_prev =
 		in
 		    #"Renamed Columns"
 	lineageTag: b65c6722-4d5b-46e9-9127-4ca5ca161dfa
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+
+expression export =
+		let
+		    Source = Folder.Files("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export")
+		in
+		    Source
+	lineageTag: 47d49670-109d-4eb4-9d51-6bf7e28c9fc1
 
 	annotation PBI_NavigationStepName = Navigation
 

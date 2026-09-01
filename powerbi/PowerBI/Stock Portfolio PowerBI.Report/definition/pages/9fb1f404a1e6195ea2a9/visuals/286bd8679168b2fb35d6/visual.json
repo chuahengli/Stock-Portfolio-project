@@ -3,10 +3,10 @@
   "name": "286bd8679168b2fb35d6",
   "position": {
     "x": 0,
-    "y": 165.62706024011479,
-    "z": 6000,
-    "height": 91.19155814449968,
-    "width": 548.398548293635,
+    "y": 152.5,
+    "z": 4000,
+    "height": 88.75,
+    "width": 548.75,
     "tabOrder": 2000
   },
   "visual": {
@@ -66,7 +66,7 @@
             "endDate": {
               "expr": {
                 "Literal": {
-                  "Value": "datetime'2026-08-27T00:00:00'"
+                  "Value": "datetime'2026-09-01T00:00:00'"
                 }
               }
             },
@@ -93,7 +93,7 @@
             "textSize": {
               "expr": {
                 "Literal": {
-                  "Value": "12D"
+                  "Value": "10D"
                 }
               }
             },
@@ -113,7 +113,7 @@
             "textSize": {
               "expr": {
                 "Literal": {
-                  "Value": "10D"
+                  "Value": "8D"
                 }
               }
             }
@@ -190,7 +190,7 @@
                             },
                             "Right": {
                               "Literal": {
-                                "Value": "datetime'2026-08-28T00:00:00'"
+                                "Value": "datetime'2026-09-02T00:00:00'"
                               }
                             }
                           }
@@ -212,7 +212,7 @@
             "show": {
               "expr": {
                 "Literal": {
-                  "Value": "true"
+                  "Value": "false"
                 }
               }
             },
@@ -245,6 +245,32 @@
               "expr": {
                 "Literal": {
                   "Value": "''"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "border": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "visualHeader": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
                 }
               }
             }

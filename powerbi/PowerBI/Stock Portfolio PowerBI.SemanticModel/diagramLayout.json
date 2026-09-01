@@ -4,7 +4,7 @@
     {
       "ordinal": 0,
       "scrollPosition": {
-        "x": 269.16666030883789,
+        "x": 719.16664123535156,
         "y": 0
       },
       "nodes": [
@@ -153,10 +153,63 @@
         },
         {
           "location": {
-            "x": 1347.1226609749272,
-            "y": 340.05373331908976
+            "x": 1693.3726609749272,
+            "y": 80.053733319089758
           },
           "nodeIndex": "Measures Table",
+          "nodeLineageTag": "d92d99e3-b7a8-47e0-bf4e-f39d5f4c93f2",
+          "size": {
+            "height": 200,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1397.0831236863885,
+            "y": 26.053733319089758
+          },
+          "nodeIndex": "fact_prices",
+          "nodeLineageTag": "f5dc0805-ef94-4aa3-96c0-458f5792e179",
+          "size": {
+            "height": 248,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1578.2935863978498,
+            "y": 345.05373331908976
+          },
+          "nodeIndex": "CurrentHoldings",
+          "nodeLineageTag": "a7fe2edf-6d69-444a-8898-a8a2d07fc5b5",
+          "size": {
+            "height": 200,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1528.6707284916354,
+            "y": 645.05373331908982
+          },
+          "nodeIndex": "Symbols A",
+          "nodeLineageTag": "fa3994c1-094b-41db-aa4c-58838d9e5f60",
+          "size": {
+            "height": 200,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1790.7145118207725,
+            "y": 637.55373331908982
+          },
+          "nodeIndex": "Symbols B",
+          "nodeLineageTag": "4cac4adf-a7a0-43ea-90b4-204aefcc9abb",
           "size": {
             "height": 200,
             "width": 234

@@ -8,7 +8,7 @@ model Model
 
 annotation __PBI_TimeIntelligenceEnabled = 1
 
-annotation PBI_QueryOrder = ["dim_date","dim_symbol","fact_benchmark","fact_benchmark_Prev","fact_cashflow","fact_positions","fact_snapshots","fact_snapshots_prev","fact_trades","AssetSubclass"]
+annotation PBI_QueryOrder = ["dim_date","dim_symbol","fact_benchmark","fact_benchmark_Prev","fact_cashflow","fact_positions","fact_snapshots","fact_snapshots_prev","fact_trades","AssetSubclass","fact_prices","export"]
 
 annotation PBI_ProTooling = ["DevMode"]
 
@@ -28,6 +28,11 @@ ref table Performance
 ref table Drawdown
 ref table LocalDateTable_4a5ec782-5974-45de-bc51-dcea25408905
 ref table 'Measures Table'
+ref table fact_prices
+ref table CurrentHoldings
+ref table LocalDateTable_97d2c3a4-464d-4447-883b-02a583a2e6b2
+ref table 'Symbols A'
+ref table 'Symbols B'
 
 ref cultureInfo en-US
 

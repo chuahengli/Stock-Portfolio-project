@@ -112,7 +112,7 @@ table fact_cashflow
 		mode: import
 		source =
 				let
-				    Source = Csv.Document(File.Contents("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export\fact_cashflow.csv"),[Delimiter=",", Columns=10, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+				    Source = Csv.Document(Folder.Files("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export"){[Name="fact_cashflow.csv"]}[Content],[Delimiter=",", Columns=10, Encoding=65001, QuoteStyle=QuoteStyle.None]),
 				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
 				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"cashflow_id", Int64.Type}, {"Date", type date}, {"Currency", type text}, {"Type", type text}, {"in_out", type text}, {"Amount", type number}, {"Remark", type text}, {"is_external", Int64.Type}, {"is_income", Int64.Type}, {"CashflowCategory", type text}})
 				in

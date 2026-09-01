@@ -104,7 +104,7 @@ table dim_date
 		mode: import
 		source =
 				let
-				    Source = Csv.Document(File.Contents("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export\dim_date.csv"),[Delimiter=",", Columns=10, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+				    Source = Csv.Document(Folder.Files("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export"){[Name="dim_date.csv"]}[Content],[Delimiter=",", Columns=10, Encoding=65001, QuoteStyle=QuoteStyle.None]),
 				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
 				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Date", type date}, {"Year", Int64.Type}, {"Quarter", Int64.Type}, {"QuarterLabel", type text}, {"Month", Int64.Type}, {"MonthName", type text}, {"Day", Int64.Type}, {"Weekday", Int64.Type}, {"WeekdayName", type text}, {"IsWeekend", Int64.Type}}),
 				    #"Added Custom" = Table.AddColumn(#"Changed Type", "YearMonth", each Date.ToText([Date], "yyyy-MM")),

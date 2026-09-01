@@ -32,6 +32,277 @@ table 'Measures Table'
 
 		annotation PBI_FormatHint = {"isGeneralNumber":true}
 
+	measure 'Sortino Ratio' = ```
+			
+			  VAR Win = FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+			  VAR MeanP = CALCULATE(AVERAGE(fact_snapshots[Time-Weight Return]), Win)
+			  VAR N = CALCULATE(COUNTA(fact_snapshots[Time-Weight Return]), Win)
+			  VAR FirstD = CALCULATE(MIN(fact_snapshots[Date]), Win)
+			  VAR LastD = CALCULATE(MAX(fact_snapshots[Date]), Win)
+			  VAR YearSpan = DIVIDE(DATEDIFF(FirstD, LastD, DAY), 365.25)
+			  VAR PeriodsPerYear = DIVIDE(N, YearSpan)
+			  VAR DownDev =
+			    CALCULATE(
+			        AVERAGEX(
+			            VALUES(dim_date[Date]),
+			            VAR Rp = CALCULATE(AVERAGE(fact_snapshots[Time-Weight Return]))
+			            RETURN IF(ISBLANK(Rp), BLANK(), MIN(Rp, 0) ^ 2)
+			        ),
+			        Win
+			    )
+			
+			  RETURN
+			      IF(N < 2, BLANK(), DIVIDE(MeanP * PeriodsPerYear, SQRT(DownDev) * SQRT(PeriodsPerYear)))
+			```
+		lineageTag: bcbda73f-d1a3-4448-b395-8a9bfe550919
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Sharpe Ratio' = ```
+			
+			  VAR Win = FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+			  VAR MeanP = CALCULATE(AVERAGE(fact_snapshots[Time-Weight Return]), Win)
+			  VAR N = CALCULATE(COUNTA(fact_snapshots[Time-Weight Return]), Win)
+			  VAR FirstD = CALCULATE(MIN(fact_snapshots[Date]), Win)
+			  VAR LastD = CALCULATE(MAX(fact_snapshots[Date]), Win)
+			  VAR YearSpan = DIVIDE(DATEDIFF(FirstD, LastD, DAY), 365.25)
+			  VAR PeriodsPerYear = DIVIDE(N, YearSpan)
+			  VAR AnnualReturn = MeanP * PeriodsPerYear
+			  RETURN IF(N < 2, BLANK(), DIVIDE(AnnualReturn - 0.04, [Portfolio Volatility]))
+			```
+		lineageTag: dcc3a2f1-29e5-4a94-b7a3-6ef44c262f97
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Historical VaR (95%)' = ```
+			
+			  VAR Win = FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+			  VAR N = CALCULATE(COUNTA(fact_snapshots[Time-Weight Return]), Win)
+			  VAR Q = CALCULATE(
+			      PERCENTILEX.INC(
+			          fact_snapshots,
+			          fact_snapshots[Time-Weight Return],
+			          0.05
+			      ),
+			      Win
+			  )
+			  RETURN IF(N < 20, BLANK(), Q)
+			```
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: 5e4576f7-4236-435d-8080-25e8ea6edec7
+
+	measure 'Calmar Ratio' =
+			
+			VAR Win = FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+			VAR N = CALCULATE(COUNTA(fact_snapshots[Time-Weight Return]), Win)
+			VAR FirstD = CALCULATE(MIN(fact_snapshots[Date]), Win)
+			VAR LastD = CALCULATE(MAX(fact_snapshots[Date]), Win)
+			VAR YearSpan = DIVIDE(DATEDIFF(FirstD, LastD, DAY), 365.25)
+			VAR NavFirst = CALCULATE(SUM(fact_snapshots[nav]), dim_date[Date] = FirstD)
+			VAR NavLast = CALCULATE(SUM(fact_snapshots[nav]), dim_date[Date] = LastD)
+			VAR CAGR = IF(YearSpan > 0, DIVIDE(NavLast, NavFirst) ^ DIVIDE(1, YearSpan) - 1)
+			VAR Mdd = [Max Drawdown]
+			RETURN IF(N < 2 || ISBLANK(Mdd) || Mdd = 0, BLANK(), DIVIDE(CAGR, -Mdd))
+		lineageTag: ae81b080-2ade-49a7-9da0-81168db53d8e
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Tracking Error' = ```
+			
+			  VAR Win = FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+			  VAR Sd = CALCULATE(
+			      STDEVX.P(
+			          VALUES(dim_date[Date]),
+			          VAR Rp = CALCULATE(AVERAGE(fact_snapshots[Time-Weight Return]))
+			          VAR Rb = CALCULATE(AVERAGE(fact_benchmark[DailyReturn]), fact_benchmark[Symbol] = "^GSPC")
+			          RETURN IF(ISBLANK(Rp) || ISBLANK(Rb), BLANK(), Rp - Rb)
+			      ),
+			      Win
+			  )
+			  VAR N =
+			    CALCULATE(
+			        SUMX(
+			            VALUES(dim_date[Date]),
+			            VAR Rp = CALCULATE(AVERAGE(fact_snapshots[Time-Weight Return]))
+			            VAR Rb = CALCULATE(AVERAGE(fact_benchmark[DailyReturn]), fact_benchmark[Symbol] = "^GSPC")
+			            RETURN IF(ISBLANK(Rp) || ISBLANK(Rb), BLANK(), 1)
+			        ),
+			        Win
+			    )
+			  VAR FirstD = CALCULATE(MIN(fact_snapshots[Date]), Win)
+			  VAR LastD = CALCULATE(MAX(fact_snapshots[Date]), Win)
+			  VAR YearSpan = DIVIDE(DATEDIFF(FirstD, LastD, DAY), 365.25)
+			  RETURN IF(N < 2, BLANK(), Sd * SQRT(DIVIDE(N, YearSpan)))
+			```
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: 0a293543-788a-4ecc-814e-d3c36ec6d862
+
+	measure 'Information Ratio' = ```
+			
+			  VAR Win = FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+			  VAR MeanExcess =
+			    CALCULATE(
+			        AVERAGEX(
+			            VALUES(dim_date[Date]),
+			            VAR Rp = CALCULATE(AVERAGE(fact_snapshots[Time-Weight Return]))
+			            VAR Rb = CALCULATE(AVERAGE(fact_benchmark[DailyReturn]), fact_benchmark[Symbol] = "^GSPC")
+			            RETURN IF(ISBLANK(Rp) || ISBLANK(Rb), BLANK(), Rp - Rb)
+			        ),
+			        Win
+			    )
+			  VAR N =
+			    CALCULATE(
+			        SUMX(
+			            VALUES(dim_date[Date]),
+			            VAR Rp = CALCULATE(AVERAGE(fact_snapshots[Time-Weight Return]))
+			            VAR Rb = CALCULATE(AVERAGE(fact_benchmark[DailyReturn]), fact_benchmark[Symbol] = "^GSPC")
+			            RETURN IF(ISBLANK(Rp) || ISBLANK(Rb), BLANK(), 1)
+			        ),
+			        Win
+			    )
+			  VAR FirstD = CALCULATE(MIN(fact_snapshots[Date]), Win)
+			  VAR LastD = CALCULATE(MAX(fact_snapshots[Date]), Win)
+			  VAR YearSpan = DIVIDE(DATEDIFF(FirstD, LastD, DAY), 365.25)
+			  VAR Te = [Tracking Error]
+			  RETURN IF(N < 2 || ISBLANK(Te) || Te = 0, BLANK(), DIVIDE(MeanExcess * DIVIDE(N, YearSpan), Te))
+			```
+		lineageTag: 4a2b1566-1e12-4080-acb0-338b271cdfcc
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Expected Shortfall 95%' = ```
+			
+			  VAR Win = FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+			  VAR N = CALCULATE(COUNTA(fact_snapshots[Time-Weight Return]), Win)
+			  VAR Q = CALCULATE(
+			      PERCENTILEX.INC(fact_snapshots, fact_snapshots[Time-Weight Return], 0.05),
+			      Win
+			  )
+			  VAR Es = CALCULATE(
+			      AVERAGEX(
+			          fact_snapshots,
+			          VAR Rp = fact_snapshots[Time-Weight Return]
+			          RETURN IF(ISBLANK(Rp) || Rp > Q, BLANK(), Rp)
+			      ),
+			      Win
+			  )
+			  RETURN IF(N < 20 || ISBLANK(Es), BLANK(), Es)
+			```
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: f8198ab8-7cf3-4926-815a-2c1ea5ebf343
+
+	measure Corr = ```
+			
+			  VAR SymA = SELECTEDVALUE ( 'Symbols A'[Symbol] )
+			  VAR SymB = SELECTEDVALUE ( 'Symbols B'[Symbol] )
+			  VAR Win = FILTER ( ALL ( dim_date[Date] ), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End] )
+			
+			  -- window means, one scalar per series (Beta pattern; unpaired is fine)
+			  VAR MeanA =
+			      IF (
+			          SymA IN VALUES ( fact_benchmark[Symbol] ),
+			          CALCULATE ( AVERAGE ( fact_benchmark[DailyReturn] ), fact_benchmark[Symbol] = SymA, Win ),
+			          CALCULATE ( AVERAGE ( fact_prices[DailyReturn] ), fact_prices[Symbol] = SymA, Win )
+			      )
+			  VAR MeanB =
+			      IF (
+			          SymB IN VALUES ( fact_benchmark[Symbol] ),
+			          CALCULATE ( AVERAGE ( fact_benchmark[DailyReturn] ), fact_benchmark[Symbol] = SymB, Win ),
+			          CALCULATE ( AVERAGE ( fact_prices[DailyReturn] ), fact_prices[Symbol] = SymB, Win )
+			      )
+			
+			  -- Cov: per-date product of deviations, averaged over PAIRED dates only
+			  VAR Cov =
+			      CALCULATE (
+			          AVERAGEX (
+			              VALUES ( dim_date[Date] ),
+			              VAR Ra =
+			                  IF (
+			                      SymA IN VALUES ( fact_benchmark[Symbol] ),
+			                      CALCULATE ( AVERAGE ( fact_benchmark[DailyReturn] ), fact_benchmark[Symbol] = SymA ),
+			                      CALCULATE ( AVERAGE ( fact_prices[DailyReturn] ), fact_prices[Symbol] = SymA )
+			                  )
+			              VAR Rb =
+			                  IF (
+			                      SymB IN VALUES ( fact_benchmark[Symbol] ),
+			                      CALCULATE ( AVERAGE ( fact_benchmark[DailyReturn] ), fact_benchmark[Symbol] = SymB ),
+			                      CALCULATE ( AVERAGE ( fact_prices[DailyReturn] ), fact_prices[Symbol] = SymB )
+			                  )
+			              RETURN
+			                  IF ( ISBLANK ( Ra ) || ISBLANK ( Rb ), BLANK (), ( Ra - MeanA ) * ( Rb - MeanB ) )
+			          ),
+			          Win
+			      )
+			
+			  -- SdA: per-date deviation of A, stdev over dates where A exists (regardless of B)
+			  VAR SdA =
+			      CALCULATE (
+			          STDEVX.P (
+			              VALUES ( dim_date[Date] ),
+			              VAR Ra =
+			                  IF (
+			                      SymA IN VALUES ( fact_benchmark[Symbol] ),
+			                      CALCULATE ( AVERAGE ( fact_benchmark[DailyReturn] ), fact_benchmark[Symbol] = SymA ),
+			                      CALCULATE ( AVERAGE ( fact_prices[DailyReturn] ), fact_prices[Symbol] = SymA )
+			                  )
+			              RETURN IF ( ISBLANK ( Ra ), BLANK (), Ra - MeanA )
+			          ),
+			          Win
+			      )
+			
+			  -- SdB: same as SdA, for B
+			  VAR SdB =
+			      CALCULATE (
+			          STDEVX.P (
+			              VALUES ( dim_date[Date] ),
+			              VAR Rb =
+			                  IF (
+			                      SymB IN VALUES ( fact_benchmark[Symbol] ),
+			                      CALCULATE ( AVERAGE ( fact_benchmark[DailyReturn] ), fact_benchmark[Symbol] = SymB ),
+			                      CALCULATE ( AVERAGE ( fact_prices[DailyReturn] ), fact_prices[Symbol] = SymB )
+			                  )
+			              RETURN IF ( ISBLANK ( Rb ), BLANK (), Rb - MeanB )
+			          ),
+			          Win
+			      )
+			
+			  -- PairedN: how many dates have BOTH series (this is what makes thin cells blank)
+			  VAR PairedN =
+			      CALCULATE (
+			          SUMX (
+			              VALUES ( dim_date[Date] ),
+			              VAR Ra =
+			                  IF (
+			                      SymA IN VALUES ( fact_benchmark[Symbol] ),
+			                      CALCULATE ( AVERAGE ( fact_benchmark[DailyReturn] ), fact_benchmark[Symbol] = SymA ),
+			                      CALCULATE ( AVERAGE ( fact_prices[DailyReturn] ), fact_prices[Symbol] = SymA )
+			                  )
+			              VAR Rb =
+			                  IF (
+			                      SymB IN VALUES ( fact_benchmark[Symbol] ),
+			                      CALCULATE ( AVERAGE ( fact_benchmark[DailyReturn] ), fact_benchmark[Symbol] = SymB ),
+			                      CALCULATE ( AVERAGE ( fact_prices[DailyReturn] ), fact_prices[Symbol] = SymB )
+			                  )
+			              RETURN IF ( ISBLANK ( Ra ) || ISBLANK ( Rb ), BLANK (), 1 )
+			          ),
+			          Win
+			      )
+			
+			  RETURN IF ( PairedN < 30, BLANK (), DIVIDE ( Cov, SdA * SdB ) )
+			```
+		lineageTag: 0ad4c4e5-9ecc-4acc-900a-3996979dac2e
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Return Count' =
+			
+			CALCULATE(
+			    COUNTA(fact_snapshots[Time-Weight Return]),
+			    FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+			)
+		formatString: 0
+		lineageTag: e0670ad1-ef6c-431e-9c9e-784fffd42d00
+
 	column Dummy
 		formatString: 0
 		lineageTag: a88a010a-7a21-4010-a38e-dc5717b7e196

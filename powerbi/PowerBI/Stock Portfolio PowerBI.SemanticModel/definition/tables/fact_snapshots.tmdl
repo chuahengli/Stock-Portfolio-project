@@ -197,11 +197,54 @@ table fact_snapshots
 
 		annotation PBI_FormatHint = {"isGeneralNumber":true}
 
+		annotation __PBI_SemanticLinks = [{"LinkTarget":{"TableName":"fact_snapshots","TableItemName":"Return Bin (2%)","ObjectType":4},"LinkType":"UsedInGroup"}]
+
+	column 'Return Bin (2%)' =
+			IF(
+				ISBLANK('fact_snapshots'[Time-Weight Return]),
+				BLANK(),
+				IF(
+					'fact_snapshots'[Time-Weight Return] >= 0,
+					ROUNDDOWN('fact_snapshots'[Time-Weight Return] / 0.02, 0) * 0.02,
+					ROUNDUP('fact_snapshots'[Time-Weight Return] / 0.02, 0) * 0.02
+				)
+			)
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: 3ea3f1c1-cbb1-469a-a932-309a2261b77e
+		summarizeBy: none
+
+		extendedProperty GroupingMetadata =
+				{
+				  "version": 0,
+				  "groupedColumns": [
+				    {
+				      "Column": {
+				        "Expression": {
+				          "SourceRef": {
+				            "Entity": "fact_snapshots"
+				          }
+				        },
+				        "Property": "Time-Weight Return"
+				      }
+				    }
+				  ],
+				  "binningMetadata": {
+				    "binSize": {
+				      "value": 0.02,
+				      "unit": 0
+				    }
+				  }
+				}
+
+		annotation GroupingDesignState = {"Version":0,"Sources":[{"Name":"f","Entity":"fact_snapshots"}],"GroupedColumns":[{"Column":{"Expression":{"SourceRef":{"Source":"f"}},"Property":"Time-Weight Return"}}],"BinItem":{"Expression":{"Floor":{"Expression":{"Column":{"Expression":{"SourceRef":{"Source":"f"}},"Property":"Time-Weight Return"}},"Size":0.02}}}}
+
+		annotation SummarizationSetBy = Automatic
+
 	partition fact_snapshots = m
 		mode: import
 		source =
 				let
-				    Source = Csv.Document(File.Contents("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export\fact_snapshots.csv"),[Delimiter=",", Columns=7, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+				    Source = Csv.Document(Folder.Files("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export"){[Name="fact_snapshots.csv"]}[Content],[Delimiter=",", Columns=7, Encoding=65001, QuoteStyle=QuoteStyle.None]),
 				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
 				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Date", type date}, {"total_assets", type number}, {"stocks", type number}, {"options", type number}, {"cash", type number}, {"nav", type number}, {"units", Int64.Type}}),
 				    #"Sorted Rows" = Table.Sort(#"Changed Type",{{"Date", Order.Ascending}}),

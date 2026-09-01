@@ -125,6 +125,21 @@ def init_db():
     )
     """
 
+    # Create per-symbol price history table (individual holdings, same schema
+    # as benchmark_history; kept separate so the two exports stay clean)
+    symbol_price_history_table = """
+    CREATE TABLE IF NOT EXISTS symbol_price_history (
+        Date TEXT,
+        Close NUMERIC,
+        High NUMERIC,
+        Low NUMERIC,
+        Open NUMERIC,
+        Volume NUMERIC,
+        Symbol TEXT,
+        PRIMARY KEY (Date, Symbol)
+    )
+    """
+
     with db_contextmanager() as conn:
         cursor = conn.cursor()
         cursor.execute(portfolio_snapshots_table)
@@ -134,6 +149,7 @@ def init_db():
         cursor.execute(net_p_l_table)
         cursor.execute(transactions_table)
         cursor.execute(benchmark_history_table)
+        cursor.execute(symbol_price_history_table)
         _ensure_cashflow_income_column(conn)
         _migrate_net_p_l(conn)
 
@@ -289,8 +305,14 @@ def indices_exists(index_name: str):
         return False 
         
 def historical_close_prices(ticker: str,period: str, interval: str):
-    data = yf.download(ticker, period= period, interval=interval,multi_level_index=False)
+    # auto_adjust pinned: yfinance's default flipped over versions -- with
+    # False an 'Adj Close' column appears and insert_dataframe would INSERT a
+    # column the history tables don't have, killing the daily job mid-run.
+    data = yf.download(ticker, period= period, interval=interval,multi_level_index=False, auto_adjust=True)
     data.reset_index(inplace=True)
+    # Normalize Date to plain YYYY-MM-DD strings: PK upserts are exact-string
+    # matches, so timestamp/timezone drift would duplicate calendar days.
+    data['Date'] = pd.to_datetime(data['Date']).dt.strftime('%Y-%m-%d')
     data['Symbol'] = ticker
     return data
 def update_indices(index_name: str,today_date = datetime.combine(date.today(), datetime.min.time())):
@@ -313,6 +335,80 @@ def indices_dict():
         'STI': '^STI'
     }
     return indices_dict
+
+
+def symbols_exists(symbol: str):
+    query = "SELECT EXISTS (SELECT 1 FROM symbol_price_history WHERE Symbol = ?)"
+    try:
+        with db_contextmanager() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, (symbol,))
+            result = cursor.fetchone()
+            return result[0] == 1 if result else False
+    except Exception as e:
+        print(f"Database error checking symbol {symbol}: {e}")
+        return False
+
+
+def position_stock_symbols():
+    """Distinct non-option symbols ever held, from the positions table.
+    Option contracts (OCC format: root + YYMMDD + C/P + strike, e.g.
+    GRAB270115C5000) are excluded: yfinance has no usable daily history for
+    them, and options correlation is a separate question from equity price
+    correlation."""
+    df = read_db("SELECT DISTINCT Symbol FROM positions")
+    occ = re.compile(r'^[A-Z]{1,6}\d{6}[CP]\d{4,}$')
+    return sorted(s for s in df['Symbol'].tolist() if not occ.match(s))
+
+
+def update_symbol_price(symbol: str, ticker: str = None):
+    """Fetch/refresh daily price history for one held symbol into
+    symbol_price_history. First sighting backfills period='max'; afterwards
+    a 1mo window tops up (same pattern as update_indices). Ticker resolution
+    mirrors export_powerbi._ticker_candidates: bare symbol first, '.SI'
+    suffix when the position traded on SG, BRK -> BRK-B variant."""
+    if ticker is None:
+        candidates = [symbol]
+        if symbol in ("BRK",):
+            candidates = ["BRK-B", symbol]
+        elif symbol.isalnum() and 2 <= len(symbol) <= 4:
+            with db_contextmanager() as conn:
+                row = conn.execute(
+                    "SELECT Market FROM positions WHERE Symbol = ? LIMIT 1",
+                    (symbol,)).fetchone()
+            if row and (row[0] or "").upper().startswith("SG"):
+                candidates = [f"{symbol}.SI", symbol]
+            else:
+                candidates = [symbol, f"{symbol}.SI"]
+    else:
+        candidates = [ticker]
+
+    data = None
+    used = None
+    for cand in candidates:
+        try:
+            df = historical_close_prices(cand, period='max' if not symbols_exists(symbol) else '1mo', interval='1d')
+            if df is not None and not df.empty:
+                data = df
+                used = cand
+                break
+        except Exception as e:
+            print(f"  {symbol}: candidate {cand} failed ({e})")
+    if data is None or data.empty:
+        print(f"  {symbol}: no price data from any candidate ({candidates}) - skipped")
+        return
+    if used != symbol:
+        data['Symbol'] = symbol  # store under portfolio symbol, not yahoo ticker
+    insert_dataframe(data, 'symbol_price_history')
+
+
+def update_symbol_prices_for_positions():
+    """Daily entry point: look at ALL symbols ever held, backfill/top up each."""
+    syms = position_stock_symbols()
+    print(f"Updating price history for {len(syms)} held symbols...")
+    for s in syms:
+        update_symbol_price(s)
+    print("Symbol price history update complete.")
 
 
 

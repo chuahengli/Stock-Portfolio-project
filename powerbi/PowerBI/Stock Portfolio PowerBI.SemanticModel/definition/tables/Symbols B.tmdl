@@ -1,0 +1,31 @@
+table 'Symbols B'
+	lineageTag: 4cac4adf-a7a0-43ea-90b4-204aefcc9abb
+
+	column Symbol
+		lineageTag: 1f5b1dab-0878-4c46-9c4d-98ad449495ed
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Symbol]
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'Symbols B' = calculated
+		mode: import
+		source =
+				
+				UNION(
+				    DISTINCT(
+				        SELECTCOLUMNS(
+				            FILTER(
+				                CurrentHoldings,
+				                CurrentHoldings[Symbol] IN VALUES(fact_prices[Symbol])
+				            ),
+				            "Symbol", CurrentHoldings[Symbol]
+				        )
+				    ),
+				    ROW("Symbol", "^GSPC"),
+				    ROW("Symbol", "^IXIC")
+				)
+
+	annotation PBI_Id = 522e20807447483f962100a0f65126a1
+

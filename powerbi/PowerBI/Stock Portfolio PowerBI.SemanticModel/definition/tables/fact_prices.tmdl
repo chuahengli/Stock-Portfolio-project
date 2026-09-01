@@ -1,0 +1,102 @@
+table fact_prices
+	lineageTag: f5dc0805-ef94-4aa3-96c0-458f5792e179
+
+	column Symbol
+		dataType: string
+		lineageTag: 6cd3615d-c533-428b-8c78-108d00a17dc2
+		summarizeBy: none
+		sourceColumn: Symbol
+
+		annotation SummarizationSetBy = Automatic
+
+	column Date
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: 90597408-651c-44dd-8024-b42e2c94e691
+		summarizeBy: none
+		sourceColumn: Date
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column Close
+		dataType: double
+		lineageTag: 0beb2e3b-776e-41eb-bb38-d86bc494e6cb
+		summarizeBy: sum
+		sourceColumn: Close
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column Index
+		dataType: int64
+		formatString: 0
+		lineageTag: e9d90ac0-0c37-4e91-8f43-923568b9d340
+		summarizeBy: sum
+		sourceColumn: Index
+
+		annotation SummarizationSetBy = Automatic
+
+	column PrevIndex
+		dataType: int64
+		formatString: 0
+		lineageTag: de6507f2-885b-40ca-852b-60524968c826
+		summarizeBy: sum
+		sourceColumn: PrevIndex
+
+		annotation SummarizationSetBy = Automatic
+
+	column PrevClose
+		dataType: double
+		lineageTag: 2ead8c1c-80e8-4446-b4bd-e77f3dc63362
+		summarizeBy: sum
+		sourceColumn: PrevClose
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column DailyReturn
+		dataType: double
+		lineageTag: 99c22dd7-6fe0-448a-a130-cff238729fee
+		summarizeBy: sum
+		sourceColumn: DailyReturn
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	partition fact_prices = m
+		mode: import
+		source =
+				let
+				    fact_prices = let
+				    Source = Csv.Document(Folder.Files("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export"){[Name="fact_prices.csv"]}[Content],[Delimiter=",", Columns=3, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Date", type date}, {"Symbol", type text}, {"Close", type number}}),
+				    #"Sorted Rows" = Table.Sort(#"Changed Type",{{"Symbol", Order.Ascending}, {"Date", Order.Ascending}}),
+				    #"Grouped Rows" = Table.Group(#"Sorted Rows", {"Symbol"}, {{"Count", each _, type table [Date=nullable date, Symbol=nullable text, Close=nullable number]}}),
+				    #"Renamed Columns" = Table.RenameColumns(#"Grouped Rows",{{"Count", "AllData"}}),
+				    #"Added Custom" = Table.AddColumn(#"Renamed Columns", "Indexed", each Table.AddIndexColumn([AllData], "Index", 0, 1, Int64.Type)),
+				    #"Removed Columns" = Table.RemoveColumns(#"Added Custom",{"AllData"}),
+				    #"Expanded Indexed" = Table.ExpandTableColumn(#"Removed Columns", "Indexed", {"Date", "Close", "Index"}, {"Date", "Close", "Index"}),
+				    #"Added Custom1" = Table.AddColumn(#"Expanded Indexed", "PrevIndex", each [Index] - 1),
+				    #"Merged Queries" = Table.NestedJoin(#"Added Custom1", {"Symbol", "PrevIndex"}, #"Added Custom1", {"Symbol", "Index"}, "Added Custom1", JoinKind.LeftOuter),
+				    #"Expanded Added Custom1" = Table.ExpandTableColumn(#"Merged Queries", "Added Custom1", {"Close"}, {"Close.1"}),
+				    #"Renamed Columns1" = Table.RenameColumns(#"Expanded Added Custom1",{{"Close.1", "PrevClose"}}),
+				    #"Changed Type1" = Table.TransformColumnTypes(#"Renamed Columns1",{{"PrevClose", type number}}),
+				    #"Added Custom2" = Table.AddColumn(#"Changed Type1", "DailyReturn", each ([Close] / [PrevClose]) - 1),
+				    #"Changed Type2" = Table.TransformColumnTypes(#"Added Custom2",{{"DailyReturn", type number}}),
+				    #"Removed Columns1" = Table.RemoveColumns(#"Changed Type2",{"Index", "PrevIndex", "PrevClose"})
+				in
+				    #"Changed Type2",
+				    #"Changed Type" = Table.TransformColumnTypes(fact_prices,{{"Date", type date}, {"Close", type number}, {"Index", Int64.Type}, {"PrevIndex", Int64.Type}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

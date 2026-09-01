@@ -11,6 +11,34 @@ How I use this file: at each checkpoint, fill the matching section before moving
 
 - Screenshots: `Media/Checkpoint N - <topic>.png`, linked below.
 
+## Contents
+
+- [Phase 0 — Setup](#phase-0--setup)
+- [Phase 1 — Get Data + Power Query](#phase-1--get-data--power-query)
+  - [Checkpoint 1](#checkpoint-1)
+- [Phase 2 — The Model](#phase-2--the-model)
+  - [Checkpoint 2](#checkpoint-2)
+- [Phase 3 — DAX](#phase-3--dax)
+  - [Checkpoint 3](#checkpoint-3)
+  - [Measure 1 — Total Assets (all history)](#measure-1--total-assets-all-history)
+  - [Measure 2 — Latest Assets](#measure-2--latest-assets)
+  - [Measure 3 — Income to date](#measure-3--income-to-date)
+  - [Measure 4 — Asset Class Weight](#measure-4--asset-class-weight)
+  - [Measure 5 — Industry, Geography](#measure-5--industry-geography)
+  - [Measure 6 — Net Trade Cash Flow](#measure-6--net-trade-cash-flow)
+  - [Measure 7 — Benchmark Volatility](#measure-7--benchmark-volatility)
+  - [Measure 8 — Portfolio Volatility](#measure-8--portfolio-volatility)
+  - [Measure 9 — Date Picker](#measure-9--date-picker)
+  - [Measure 10 — 3 Ratio AsOf](#measure-10--3-ratio-asof)
+  - [Measure 11 — Custom Date Picker](#measure-11--custom-date-picker)
+  - [Measure 12 — Performance vs Benchmarks](#measure-12--performance-vs-benchmarks)
+  - [Measure 13 — Drawdown](#measure-13--drawdown)
+- [Phase 4 — The Report (Design)](#phase-4--the-report-design)
+  - [Checkpoint 4](#checkpoint-4)
+  - [Risks Page](#risks-page)
+  - [Trades Page](#trades-page)
+- [Phase 5 — Refresh & Delivery](#phase-5--refresh--delivery)
+
 ---
 
 ## Phase 0 — Setup
@@ -265,6 +293,10 @@ How I use this file: at each checkpoint, fill the matching section before moving
 - Added visualisation filter date is on or after 01/01/2026 so it is YTD this year. SP500 got 13.8%
 
 ![Checkpoint 3 — Benchmark Annualised Volatility Matrix](Media/Checkpoint%203%20-%20Benchmark%20Annualised%20Volatility%20Matrix.png)
+
+- Measure 13 — Drawdown % evidence (Phase 4, windowed):
+
+![Checkpoint 3 — Drawdown %](Media/Checkpoint%203%20-%20Drawdown%20%.png)
 
 #### Measure 8 — Portfolio Volatility
 
@@ -636,6 +668,16 @@ How I use this file: at each checkpoint, fill the matching section before moving
 
 ## Phase 4 — The Report (Design)
 
+> Pages shipped: Overview, Risks, Trades (all 1280x720). Evidence below; per-visual detail in the sections that follow.
+
+### Checkpoint 4
+
+- Evidence:
+
+![Checkpoint 4 — Risks page](Media/Checkpoint%204%20-%20Page%202.png)
+
+![Checkpoint 4 — Trades page](Media/Checkpoint%204%20-%20Page%203.png)
+
 ### Risks Page
 
 - Added Window Filtering that is synced with the Overview page
@@ -731,50 +773,414 @@ How I use this file: at each checkpoint, fill the matching section before moving
 
 #### Sortino Ratio
 
+- Sortino Ratio:
+
+  ```dax
+  Sortino Ratio = 
+  VAR Win = FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+  VAR MeanP = CALCULATE(AVERAGE(fact_snapshots[Time-Weight Return]), Win)
+  VAR N = CALCULATE(COUNTA(fact_snapshots[Time-Weight Return]), Win)
+  VAR FirstD = CALCULATE(MIN(fact_snapshots[Date]), Win)
+  VAR LastD = CALCULATE(MAX(fact_snapshots[Date]), Win)
+  VAR YearSpan = DIVIDE(DATEDIFF(FirstD, LastD, DAY), 365.25)
+  VAR PeriodsPerYear = DIVIDE(N, YearSpan)
+  VAR DownDev =
+    CALCULATE(
+        AVERAGEX(
+            VALUES(dim_date[Date]),
+            VAR Rp = CALCULATE(AVERAGE(fact_snapshots[Time-Weight Return]))
+            RETURN IF(ISBLANK(Rp), BLANK(), MIN(Rp, 0) ^ 2)
+        ),
+        Win
+    )
+
+  RETURN
+      IF(N < 2, BLANK(), DIVIDE(MeanP * PeriodsPerYear, SQRT(DownDev) * SQRT(PeriodsPerYear)))
+  ```
+
+- Included, the Win, Window filter, same stuff as portfolio vol, inculuded MeanP from Beta
+- Var DownDev similar to Cov of Beta. Min() so negative is squared, positives are 0
+- sqrt downdev to get actual deviation not variance. Same guard of N < 2 , BLANK()
+- Average over all dates, not just negative ones.
+
 #### Sharpe Ratio
 
-#### Tracking Error (skeleton)
+  ```dax
+  Sharpe Ratio =
+  VAR Win = FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+  VAR MeanP = CALCULATE(AVERAGE(fact_snapshots[Time-Weight Return]), Win)
+  VAR N = CALCULATE(COUNTA(fact_snapshots[Time-Weight Return]), Win)
+  VAR FirstD = CALCULATE(MIN(fact_snapshots[Date]), Win)
+  VAR LastD = CALCULATE(MAX(fact_snapshots[Date]), Win)
+  VAR YearSpan = DIVIDE(DATEDIFF(FirstD, LastD, DAY), 365.25)
+  VAR PeriodsPerYear = DIVIDE(N, YearSpan)
+  VAR AnnualReturn = MeanP * PeriodsPerYear
+  RETURN IF(N < 2, BLANK(), DIVIDE(AnnualReturn - 0.04, [Portfolio Volatility]))
+  ```
 
-- Question it answers: "how different am I actually from the index?"
-- Inputs: daily portfolio return (fact_snapshots[Time-Weight Return]), daily benchmark return (fact_benchmark[DailyReturn], one Symbol — likely ^GSPC)
-- Pattern: same skeleton as the vol measures — Win filter, N, FirstD/LastD, YearSpan — but the stdev runs over the daily difference, not the raw return
-- Needs the two series aligned per date (UNION composite or a paired CALCULATE); benchmark has no dim_symbol row — pin the Symbol, don't average
-- Format: "0.0%", blank guard when N < 2
-- QA: ALL window → small number if the portfolio broadly tracks ^GSPC; window to 1M → jumps around
+- Numerator: same MeanP * PeriodsPerYear, minus risk-free rate.
+- Set as a constant 4%
+- Use Portfolio Volatility measure that was created already.
 
-#### Top-5 Weight / Concentration (skeleton)
+#### VaR
 
-- Question it answers: "is the risk really just a few names?"
-- Inputs: fact_positions latest as-of weights (reuse the as-of allocation pattern: LastDataDay pinned per the dim filter pitfall, ALL(dim_symbol) in the denominator)
-- Measure: MAXX over the top 5 symbol weights after as-of (or a top-N bar visual + a single "Top-5 combined weight" card)
-- USD-basis caveat applies (SGD leftovers unconverted)
-- QA: sum of the 5 bars against the card value
-
-#### Historical VaR at 5% (skeleton)
-
+- Value at Risk
 - Question it answers: "on a bad day, how bad?"
+- Decided to use Historical VaR, not parametric or Monte Carlo
 - Inputs: fact_snapshots[Time-Weight Return] within Win
-- Pattern: PERCENTILEX.INC over the windowed returns at 0.05; window wrapper + blank guard like the vol measures
-- Format: "0.0%"; label should say the confidence level so the card is self-explanatory
-- QA: compare against eyeballing the worst daily returns on the Overview line for the same window
+- Take the actual daily returns, find 5th percentile (95 % confidence)
+- Historical Value at Risk (95%)
 
-#### Calmar Ratio (skeleton)
+  ```dax
+  Historical VaR 95% =
+  VAR Win = FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+  VAR N = CALCULATE(COUNTA(fact_snapshots[Time-Weight Return]), Win)
+  VAR Q = CALCULATE(
+      PERCENTILEX.INC(
+          fact_snapshots,
+          fact_snapshots[Time-Weight Return],
+          0.05
+      ),
+      Win
+  )
+  RETURN IF(N < 20, BLANK(), Q)
+  ```
+
+- Take Win as usual to be windowed filter
+- N is number of return rows counts in window filter
+- Calculate 5th percentile ...
+
+#### Calmar Ratio
 
 - Question it answers: return per unit of worst pain (no risk-free rate needed)
 - Inputs: CAGR (may not exist yet as a measure) and [Max Drawdown]
-- Pattern: one DIVIDE, guard on the denominator (drawdown is negative — decide DIVIDE(..., -[Max Drawdown]) or ABS)
-- QA: ALL window over the full history; a positive-return portfolio must print positive
+- CAGR must be geometric
+- Guards:
+  - N < 2
+-
 
-#### Recovery Time (skeleton)
+  ```dax
+  Calmar Ratio =
+  VAR Win = FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+  VAR N = CALCULATE(COUNTA(fact_snapshots[Time-Weight Return]), Win)
+  VAR FirstD = CALCULATE(MIN(fact_snapshots[Date]), Win)
+  VAR LastD = CALCULATE(MAX(fact_snapshots[Date]), Win)
+  VAR YearSpan = DIVIDE(DATEDIFF(FirstD, LastD, DAY), 365.25)
+  VAR NavFirst = CALCULATE(SUM(fact_snapshots[nav]), dim_date[Date] = FirstD)
+  VAR NavLast = CALCULATE(SUM(fact_snapshots[nav]), dim_date[Date] = LastD)
+  VAR CAGR = IF(YearSpan > 0, DIVIDE(NavLast, NavFirst) ^ DIVIDE(1, YearSpan) - 1)
+  VAR Mdd = [Max Drawdown]
+  RETURN IF(N < 2 || ISBLANK(Mdd) || Mdd = 0, BLANK(), DIVIDE(CAGR, -Mdd))
+  ```
 
-- Question it answers: how long the worst dip took to heal
-- Inputs: Drawdown calculated table (Level, PeakSoFar per Date)
-- Pattern: find the date of [Max Drawdown] (the trough), then MINX over dates after the trough where Level returns to the trough's PeakSoFar
-- Optional visual: card in days, or annotate the drawdown line
-- QA: pick a known dip in the line and count days by hand for one window
+- NavFirst, NavLast, gives value of NAV of FirstD and LastD same as Portfolio Growth measure
+- VAR CAGR = IF(YearSpan > 0, DIVIDE(NavLast, NavFirst) ^ DIVIDE(1, YearSpan) - 1) ->  (end/start)^(1/years) − 1 finds and annualises the growth rate based on start and end window. IF(YearSpan > 0..) so that it doesn't evaluate if YearSpan is 0 or BLANK.
+- IF(N < 2 || ISBLANK(Mdd) || Mdd = 0, BLANK(), DIVIDE(CAGR, -Mdd)) -> Same N>2 guard. Check if Mdd is blank or 0 then BLANK(). -Mdd since Mdd is always negative. So can divide the ratio properly
+
+#### Tracking Error
+
+- Question it answers: "how different am I actually from the index?"
+- Distinctness of portfolio volatility, not better or worse per se
+- Inputs: daily portfolio return (fact_snapshots[Time-Weight Return]), daily benchmark return (fact_benchmark[DailyReturn], one Symbol — likely ^GSPC)
+- SD of the difference between portfolio and benchmark
+- Pattern: same skeleton as the vol measures — Win filter, N, FirstD/LastD, YearSpan — but the stdev runs over the daily difference, not the raw return
+- Needs the two series aligned per date (UNION composite or a paired CALCULATE)
+-
+
+  ```dax
+  Tracking Error =
+  VAR Win = FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+  VAR Sd = CALCULATE(
+      STDEVX.P(
+          VALUES(dim_date[Date]),
+          VAR Rp = CALCULATE(AVERAGE(fact_snapshots[Time-Weight Return]))
+          VAR Rb = CALCULATE(AVERAGE(fact_benchmark[DailyReturn]), fact_benchmark[Symbol] = "^GSPC")
+          RETURN IF(ISBLANK(Rp) || ISBLANK(Rb), BLANK(), Rp - Rb)
+      ),
+      Win
+  )
+  VAR N =
+    CALCULATE(
+        SUMX(
+            VALUES(dim_date[Date]),
+            VAR Rp = CALCULATE(AVERAGE(fact_snapshots[Time-Weight Return]))
+            VAR Rb = CALCULATE(AVERAGE(fact_benchmark[DailyReturn]), fact_benchmark[Symbol] = "^GSPC")
+            RETURN IF(ISBLANK(Rp) || ISBLANK(Rb), BLANK(), 1)
+        ),
+        Win
+    )
+  VAR FirstD = CALCULATE(MIN(fact_snapshots[Date]), Win)
+  VAR LastD = CALCULATE(MAX(fact_snapshots[Date]), Win)
+  VAR YearSpan = DIVIDE(DATEDIFF(FirstD, LastD, DAY), 365.25)
+  RETURN IF(N < 2, BLANK(), Sd * SQRT(DIVIDE(N, YearSpan)))
+  ```
+
+- Sd calculate stdev of Rp-Rb if they Rp and Rb both are not blank
+- FirstD, LastD, YearSpan all same as before. Similar to volatility for Sd * SQRT(DIVIDE(N, YearSpan))
+
+#### Information Ratio
+
+- IR = annualized mean excess return ÷ annualized tracking error
+- for every unit of deviation from the index, how much return did I actually earn?
+- IR > 0.5 good sustained, ~1.0 excellent (rare), negative = you took on deviation and lost.
+- IR is Sharpe pattern with the benchmark replacing the constant 4% risk-free
+- Mean daily excess × (N/YearSpan), over the TE you already compute
+-
+
+  ```dax
+  Information Ratio =
+  VAR Win = FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+  VAR MeanExcess =
+    CALCULATE(
+        AVERAGEX(
+            VALUES(dim_date[Date]),
+            VAR Rp = CALCULATE(AVERAGE(fact_snapshots[Time-Weight Return]))
+            VAR Rb = CALCULATE(AVERAGE(fact_benchmark[DailyReturn]), fact_benchmark[Symbol] = "^GSPC")
+            RETURN IF(ISBLANK(Rp) || ISBLANK(Rb), BLANK(), Rp - Rb)
+        ),
+        Win
+    )
+  VAR N =
+    CALCULATE(
+        SUMX(
+            VALUES(dim_date[Date]),
+            VAR Rp = CALCULATE(AVERAGE(fact_snapshots[Time-Weight Return]))
+            VAR Rb = CALCULATE(AVERAGE(fact_benchmark[DailyReturn]), fact_benchmark[Symbol] = "^GSPC")
+            RETURN IF(ISBLANK(Rp) || ISBLANK(Rb), BLANK(), 1)
+        ),
+        Win
+    )
+  VAR FirstD = CALCULATE(MIN(fact_snapshots[Date]), Win)
+  VAR LastD = CALCULATE(MAX(fact_snapshots[Date]), Win)
+  VAR YearSpan = DIVIDE(DATEDIFF(FirstD, LastD, DAY), 365.25)
+  VAR Te = [Tracking Error]
+  RETURN IF(N < 2 || ISBLANK(Te) || Te = 0, BLANK(), DIVIDE(MeanExcess * DIVIDE(N, YearSpan), Te))
+  ```
+
+- Similar to Tracking Error, but find the mean excess returns
+
+#### Expected Shortfall (CVaR 95%)
+
+- Average of the days at or beyond your VaR boundary
+-
+
+  ```dax
+  Expected Shortfall 95% =
+  VAR Win = FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+  VAR N = CALCULATE(COUNTA(fact_snapshots[Time-Weight Return]), Win)
+  VAR Q = CALCULATE(
+      PERCENTILEX.INC(fact_snapshots, fact_snapshots[Time-Weight Return], 0.05),
+      Win
+  )
+  VAR Es = CALCULATE(
+      AVERAGEX(
+          fact_snapshots,
+          VAR Rp = fact_snapshots[Time-Weight Return]
+          RETURN IF(ISBLANK(Rp) || Rp > Q, BLANK(), Rp)
+      ),
+      Win
+  )
+  RETURN IF(N < 20 || ISBLANK(Es), BLANK(), Es)
+```
+
+#### Correlation heatmap
+
+- Wanted to make a correlation between positions and the benchmarks
+- To make it accurate, since my positions are not taken every single date, wanted to make sure they are accurate created additional python code to pull historical price action
+- Added CSV, sort by symbol then date
+- Group by Symbol to create another column
+- Then created index column:
+
+  ```dax
+  Table.AddIndexColumn([AllData], "Index", 0, 1, Int64.Type)
+  ```
+
+- Remove previous group by symbols column
+- Expand Indexed, Tick all but Symbol (already exists) to get all 1 date 1 symbol row with indexed 0-max for each symbol
+- Add column : Prev_Index = [Index] + 1
+- Merge the query with itself on Symbol + Prev_Index = Symbol + Index, expand Close as PrevClose.
+- Add custom column DailyReturn = ([Close] / [Prev_Close]) - 1
+-
+
+  ```dax
+  CurrentHoldings =
+  VAR LastDay = CALCULATE(MAX(fact_positions[Date]), ALL(dim_symbol))
+  RETURN
+      CALCULATETABLE(
+          fact_positions,
+          fact_positions[Date] = LastDay
+      )
+  ```
+
+- Created current holdings table
+- Create Symbols A and B for the correlation heat map horizontal and vertical
+
+  ```dax
+  Symbols A = 
+  UNION(
+      DISTINCT(
+          SELECTCOLUMNS(
+              FILTER(
+                  CurrentHoldings,
+                  CurrentHoldings[Symbol] IN VALUES(fact_prices[Symbol])
+              ),
+              "Symbol", CurrentHoldings[Symbol]
+          )
+      ),
+      ROW("Symbol", "^GSPC"),
+      ROW("Symbol", "^IXIC")
+  )
+  ```
+
+- Created Correlation Measure:
+
+  ```dax
+  Corr =
+  VAR SymA = SELECTEDVALUE ( 'Symbols A'[Symbol] )
+  VAR SymB = SELECTEDVALUE ( 'Symbols B'[Symbol] )
+  VAR Win = FILTER ( ALL ( dim_date[Date] ), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End] )
+
+  -- window means, one scalar per series (Beta pattern; unpaired is fine)
+  VAR MeanA =
+      IF (
+          SymA IN VALUES ( fact_benchmark[Symbol] ),
+          CALCULATE ( AVERAGE ( fact_benchmark[DailyReturn] ), fact_benchmark[Symbol] = SymA, Win ),
+          CALCULATE ( AVERAGE ( fact_prices[DailyReturn] ), fact_prices[Symbol] = SymA, Win )
+      )
+  VAR MeanB =
+      IF (
+          SymB IN VALUES ( fact_benchmark[Symbol] ),
+          CALCULATE ( AVERAGE ( fact_benchmark[DailyReturn] ), fact_benchmark[Symbol] = SymB, Win ),
+          CALCULATE ( AVERAGE ( fact_prices[DailyReturn] ), fact_prices[Symbol] = SymB, Win )
+      )
+
+  -- Cov: per-date product of deviations, averaged over PAIRED dates only
+  VAR Cov =
+      CALCULATE (
+          AVERAGEX (
+              VALUES ( dim_date[Date] ),
+              VAR Ra =
+                  IF (
+                      SymA IN VALUES ( fact_benchmark[Symbol] ),
+                      CALCULATE ( AVERAGE ( fact_benchmark[DailyReturn] ), fact_benchmark[Symbol] = SymA ),
+                      CALCULATE ( AVERAGE ( fact_prices[DailyReturn] ), fact_prices[Symbol] = SymA )
+                  )
+              VAR Rb =
+                  IF (
+                      SymB IN VALUES ( fact_benchmark[Symbol] ),
+                      CALCULATE ( AVERAGE ( fact_benchmark[DailyReturn] ), fact_benchmark[Symbol] = SymB ),
+                      CALCULATE ( AVERAGE ( fact_prices[DailyReturn] ), fact_prices[Symbol] = SymB )
+                  )
+              RETURN
+                  IF ( ISBLANK ( Ra ) || ISBLANK ( Rb ), BLANK (), ( Ra - MeanA ) * ( Rb - MeanB ) )
+          ),
+          Win
+      )
+
+  -- SdA: per-date deviation of A, stdev over dates where A exists (regardless of B)
+  VAR SdA =
+      CALCULATE (
+          STDEVX.P (
+              VALUES ( dim_date[Date] ),
+              VAR Ra =
+                  IF (
+                      SymA IN VALUES ( fact_benchmark[Symbol] ),
+                      CALCULATE ( AVERAGE ( fact_benchmark[DailyReturn] ), fact_benchmark[Symbol] = SymA ),
+                      CALCULATE ( AVERAGE ( fact_prices[DailyReturn] ), fact_prices[Symbol] = SymA )
+                  )
+              RETURN IF ( ISBLANK ( Ra ), BLANK (), Ra - MeanA )
+          ),
+          Win
+      )
+
+  -- SdB: same as SdA, for B
+  VAR SdB =
+      CALCULATE (
+          STDEVX.P (
+              VALUES ( dim_date[Date] ),
+              VAR Rb =
+                  IF (
+                      SymB IN VALUES ( fact_benchmark[Symbol] ),
+                      CALCULATE ( AVERAGE ( fact_benchmark[DailyReturn] ), fact_benchmark[Symbol] = SymB ),
+                      CALCULATE ( AVERAGE ( fact_prices[DailyReturn] ), fact_prices[Symbol] = SymB )
+                  )
+              RETURN IF ( ISBLANK ( Rb ), BLANK (), Rb - MeanB )
+          ),
+          Win
+      )
+
+  -- PairedN: how many dates have BOTH series (this is what makes thin cells blank)
+  VAR PairedN =
+      CALCULATE (
+          SUMX (
+              VALUES ( dim_date[Date] ),
+              VAR Ra =
+                  IF (
+                      SymA IN VALUES ( fact_benchmark[Symbol] ),
+                      CALCULATE ( AVERAGE ( fact_benchmark[DailyReturn] ), fact_benchmark[Symbol] = SymA ),
+                      CALCULATE ( AVERAGE ( fact_prices[DailyReturn] ), fact_prices[Symbol] = SymA )
+                  )
+              VAR Rb =
+                  IF (
+                      SymB IN VALUES ( fact_benchmark[Symbol] ),
+                      CALCULATE ( AVERAGE ( fact_benchmark[DailyReturn] ), fact_benchmark[Symbol] = SymB ),
+                      CALCULATE ( AVERAGE ( fact_prices[DailyReturn] ), fact_prices[Symbol] = SymB )
+                  )
+              RETURN IF ( ISBLANK ( Ra ) || ISBLANK ( Rb ), BLANK (), 1 )
+          ),
+          Win
+      )
+
+  RETURN IF ( PairedN < 30, BLANK (), DIVIDE ( Cov, SdA * SdB ) )
+  ```
+
+- MeanA/MeanB - each series avg return over the window
+- Cov - Covariance, walk through each date, get A and B return. If either missing, skip the date, otherwise ( Ra - MeanA ) * ( Rb - MeanB )
+- SdA/SdB - stdev of each series deviations over the dates where the dates the series exist.
+- PairedN - count 1 for every date where both exist. Dates where one symbol wasn't trading simply don't count.
+- RETURN IF ( PairedN < 30, BLANK (), DIVIDE ( Cov, SdA * SdB ) ) -> Guard if less than 30 pairs. Divide Cov with product of SdA*Sdb
+- Changed fact_price table data types so that they fit. Caused the error in the correlation matrix
+
+#### Symbol Allocation Treemap
+
+- Treemap on the Risks page: Symbol for the group, `Portfolio %` for the values — current holdings' weight share at a glance.
+
+![Checkpoint 4 — Symbol Allocation Treemap](Media/Checkpoint%204%20-%20Symbol%20Allocation%20Treemap.png)
+
+#### Daily Returns Histogram
+
+  ```dax
+  Return Count =
+  CALCULATE(
+      COUNTA(fact_snapshots[Time-Weight Return]),
+      FILTER(ALL(dim_date[Date]), dim_date[Date] >= [WindowStart] && dim_date[Date] <= [Window End])
+  )
+  ```
+
+- Bins: Data pane ▸ right-click fact_snapshots[Time-Weight Return] ▸ New group ▸ Bin type Number of bins is wrong here choose Size of bins ▸ size 0.02 (2% bins ≈ 20 bars over your −15% to +10% range). Name it e.g. Return Bin (2%).
+
+- Visual: clustered column chart (not the histogram visual — that one can't use your windowed measure). X-axis = the new bin field (don't summarize), Y-axis = Return Count. Tooltip: add Time-Weight Return average if you want the exact mean per bar.
+
+### Trades Page
+
+#### Trades Ledger Table
+
+- Table visual: Fields - dim_date[Date], fact_trades[Symbol], fact_trades[Name], fact_trades[Buy_Sell], fact_trades[Quantity], fact_trades[Fill_Price], fact_trades[Gross_Amount], fact_trades[Currency]
+- Bind Date through dim_date
+- Sort by Date descending, Format: percents n/a but money columns $ #,##0.00, remove gridlines, header text #C9CBD1, background #1A1A1F
 
 ---
 
 ## Phase 5 — Refresh & Delivery
 
-_(empty until reached)_
+> Status: DONE 1 Sep. Manual refresh loop proven; sources swapped to the Folder connector (zero hardcoded paths); PDF exported below as the delivery artifact.
+
+- Reran the data pipeline, refreshed everything
+- Redid the source file export using folders
+- Replaced in the advanced editor the source paths
+- Folder.Files("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export"){[Name="dim_date.csv"]}[Content]
+
+- Delivery: exported the full report to PDF
+
+![Checkpoint 5 — Full report PDF export](Media/Stock%20Portfolio%20PowerBI%20pdf%20Export.pdf)
+

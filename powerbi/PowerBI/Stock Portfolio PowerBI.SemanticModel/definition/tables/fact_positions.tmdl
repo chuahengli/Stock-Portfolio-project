@@ -88,41 +88,41 @@ table fact_positions
 
 		annotation PBI_FormatHint = {"isGeneralNumber":true}
 
-	column Current_Price
+	column Price
 		dataType: double
 		lineageTag: e03ce692-7411-4bde-925a-3342c20efc69
 		summarizeBy: sum
-		sourceColumn: Current_Price
+		sourceColumn: Price
 
 		annotation SummarizationSetBy = Automatic
 
 		annotation PBI_FormatHint = {"isGeneralNumber":true}
 
-	column P_L_Percent
+	column 'P/L %'
 		dataType: double
 		lineageTag: 9ce849fe-e211-4238-a019-9d9e7b1229ca
 		summarizeBy: sum
-		sourceColumn: P_L_Percent
+		sourceColumn: P/L %
 
 		annotation SummarizationSetBy = Automatic
 
 		annotation PBI_FormatHint = {"isGeneralNumber":true}
 
-	column P_L
+	column P/L
 		dataType: double
 		lineageTag: 3530088f-1454-4a5b-bf1e-6edbbd0d8162
 		summarizeBy: sum
-		sourceColumn: P_L
+		sourceColumn: P/L
 
 		annotation SummarizationSetBy = Automatic
 
 		annotation PBI_FormatHint = {"isGeneralNumber":true}
 
-	column Today_s_P_L
+	column 'Today''s P/L'
 		dataType: double
 		lineageTag: 45547f0e-6c5d-4788-a0ca-28715e673bec
 		summarizeBy: sum
-		sourceColumn: Today_s_P_L
+		sourceColumn: Today's P/L
 
 		annotation SummarizationSetBy = Automatic
 
@@ -136,11 +136,11 @@ table fact_positions
 
 		annotation SummarizationSetBy = Automatic
 
-	column Portfolio_Percent
+	column 'Portfolio %'
 		dataType: double
 		lineageTag: 52ef688c-2d7b-42ed-aaaf-057ff7ba6f5f
 		summarizeBy: sum
-		sourceColumn: Portfolio_Percent
+		sourceColumn: Portfolio %
 
 		annotation SummarizationSetBy = Automatic
 
@@ -150,13 +150,14 @@ table fact_positions
 		mode: import
 		source =
 				let
-				    Source = Csv.Document(File.Contents("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export\fact_positions.csv"),[Delimiter=",", Columns=13, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+				    Source = Csv.Document(Folder.Files("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export"){[Name="fact_positions.csv"]}[Content],[Delimiter=",", Columns=13, Encoding=65001, QuoteStyle=QuoteStyle.None]),
 				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
 				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Date", type date}, {"Symbol", type text}, {"Name", type text}, {"Market", type text}, {"Quantity", type number}, {"Market_Value", type number}, {"Diluted_Cost", type number}, {"Current_Price", type number}, {"P_L_Percent", type number}, {"P_L", type number}, {"Today_s_P_L", type number}, {"Currency", type text}, {"Portfolio_Percent", Percentage.Type}}),
 				    #"Divided Column" = Table.TransformColumns(#"Changed Type", {{"P_L_Percent", each _ / 100, type number}}),
-				    #"Changed Type1" = Table.TransformColumnTypes(#"Divided Column",{{"P_L_Percent", Percentage.Type}})
+				    #"Changed Type1" = Table.TransformColumnTypes(#"Divided Column",{{"P_L_Percent", Percentage.Type}}),
+				    #"Renamed Columns" = Table.RenameColumns(#"Changed Type1",{{"Current_Price", "Price"}, {"P_L_Percent", "P/L %"}, {"P_L", "P/L"}, {"Today_s_P_L", "Today's P/L"}, {"Portfolio_Percent", "Portfolio %"}})
 				in
-				    #"Changed Type1"
+				    #"Renamed Columns"
 
 	annotation PBI_NavigationStepName = Navigation
 
