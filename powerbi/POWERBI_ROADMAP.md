@@ -1,7 +1,6 @@
 # Power BI Learning Roadmap — Stock Portfolio project
 
 > Project status: **ALL PHASES COMPLETE** (Phases 0–5, finished 1 Sep 2026).
-> Remaining open items: TE/IR N≥20 floor decision, optional Phase 6 design.
 > This file is the course contract + archive. The learning journal lives in
 > `PowerBI/NOTES.md` (user-owned).
 
@@ -346,27 +345,6 @@ Checkpoint 4: DONE — screenshots of every page in Media/, PDF exported (Phase 
 The original step-by-step is preserved above in the outcome notes; re-read it if
 re-building from scratch.
 
-## VSMC pacing answer (when they ask "how long to pick it up?")
-
-Honest and project-grounded version for your interview:
-"I already have real portfolio data, and I am building my own Power BI report on it
-end to end right now — Get Data, Power Query cleaning, a proper star-schema model
-and DAX measures. I expect the fundamentals to be comfortable within my first two
-weeks of part-time practice, and a polished report done in about a month. After that,
-your schema and KPI definitions are the fast part, because the toolset becomes a
-reflex."
-Say it in your own words; the load-bearing ideas: existing real data, end-to-end
-ownership, a concrete date.
-
-## Blocker protocol
-
-1. Try yourself 15-20 minutes first.
-2. Write exactly: "I tried X, expected Y, got Z, error text: ..." + a screenshot
-   (don't include your blind guesses).
-3. Send it. I explain the concept, then we find where your logic diverges; you retype
-   the fix yourself. If the blocker is a concept — not a bug — ask before the timer;
-   the concept battle is the valuable part.
-
 ## Quick reference (cheat notes)
 
 Power Query (M): Table.AddColumn, Table.TransformColumnTypes, Table.SelectRows,
@@ -377,5 +355,3 @@ Table.Merge + Table.ExpandTableColumn.
 DAX: CALCULATE, FILTER, ALL, ALLSELECTED, VALUES, SUM, SUMX, STDEVX.P, FIRSTDATE,
 LASTDATE, LASTNONBLANK, MAX/MIN, DIVIDE, SELECTEDVALUE, VAR/RETURN.
 
-Phase 6 (when wanted): research-folder tickers, FX snapshots, or an RLS drill —
-your call.

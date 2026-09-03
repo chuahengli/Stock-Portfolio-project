@@ -104,8 +104,40 @@ pipenv install
 ├── Pipfile                   # Dependency definitions (pipenv)
 ├── .env.example              # Template for credential configuration
 ├── .gitignore                # Prevents leakage of secrets, DB, runtime binaries
+├── powerbi/
+│   ├── export/               # 8 star-schema CSVs generated from the DB (Power BI source)
+│   ├── POWERBI_ROADMAP.md    # Power BI learning track — course contract + archive
+│   └── PowerBI/              # PBIP report + semantic model, NOTES.md journal, Media/
 └── README.md
 ```
+
+## 📊 Power BI Reporting
+
+A full Power BI report built on the same data — a star-schema semantic model loaded from 8
+generated CSVs (`powerbi/export/`), written as a **PBIP project** (model + report definition
+committed in this repo, no opaque .pbix). Refresh is a folder connector over the export
+directory: re-run `pipenv run python -m source.export_powerbi --no-enrich` and hit Refresh.
+
+**3 report pages (1280×720):**
+
+| Page | Contents |
+| ---- | -------- |
+| Overview | Assets, cash/stocks/options allocation, portfolio vs benchmark growth, sector & country allocation |
+| Risks | Volatility, max drawdown, Beta vs S&P 500, Sortino, Sharpe, Historical VaR (95%), Expected Shortfall (95%), Calmar, Tracking Error, Information Ratio, correlation heatmap, daily-return histogram, symbol allocation treemap |
+| Trades | Full buy/sell ledger + net trade cash-flow matrix, filterable by period |
+
+**30 DAX measures**, every one QA'd against Python recomputation from the raw CSVs
+(e.g. Historical VaR 95% = −5.57%, Expected Shortfall = −7.78%, worst single day on record
+−15.5%). Period slicing is a disconnected-table window system (1W / 1M / 3M / 6M / YTD / ALL)
+applied inside each measure. The learning track and measure designs are documented in
+[`powerbi/POWERBI_ROADMAP.md`](powerbi/POWERBI_ROADMAP.md) with a user-written journal in
+[`powerbi/PowerBI/NOTES.md`](powerbi/PowerBI/NOTES.md).
+
+| Overview page | Risks page |
+| ------------- | ---------- |
+| ![Overview page](powerbi/PowerBI/Media/Checkpoint%203%20-%20Page%201.png) | ![Risks page](powerbi/PowerBI/Media/Checkpoint%204%20-%20Page%202.png) |
+
+[Download the full report (PDF export)](powerbi/PowerBI/Media/Stock%20Portfolio%20PowerBI%20pdf%20Export.pdf)
 
 ## 📊 Usage
 
