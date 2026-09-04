@@ -67,7 +67,7 @@ MOOMOO_LOGIN_PWD=your_password
 OPEND_DIR=C:\Users\YourName\.ssh\moomoo_OpenD_9.6.5618_Windows
 
 # Date you opened your Moomoo account (YYYY-MM-DD)
-START_DATE="2023-08-07"
+START_DATE="YYYY-MM-DD"
 ```
 
 > **Why this structure?**
@@ -137,7 +137,7 @@ applied inside each measure. The learning track and measure designs are document
 | ------------- | ---------- |
 | ![Overview page](powerbi/PowerBI/Media/Checkpoint%203%20-%20Page%201.png) | ![Risks page](powerbi/PowerBI/Media/Checkpoint%204%20-%20Page%202.png) |
 
-[Download the full report (PDF export)](powerbi/PowerBI/Media/Stock%20Portfolio%20PowerBI%20pdf%20Export.pdf)
+> Screenshots are redacted for privacy — portfolio values, holdings and trade details are hidden; the full-res interactive report is not published.
 
 ## 📊 Usage
 

@@ -337,8 +337,7 @@ Checkpoint 4: DONE — screenshots of every page in Media/, PDF exported (Phase 
 >    paths left in the model. The combine-free shape kept: each file remains its
 >    own query. This is the shape VSMC would use for a daily report.
 > 3. Power BI Service: DECLINED by user decision — PDF export is the delivery
->    artifact instead (Media/Stock Portfolio PowerBI pdf Export.pdf, linked from
->    NOTES Phase 5).
+>    artifact (kept locally — not published; contains real portfolio values).
 > 4. Optional later: SQLite directly via ODBC (System DSN) — ask when wanted.
 > 5. PDF into the Portfolio Site assets folder later (separate existing pipeline).
 

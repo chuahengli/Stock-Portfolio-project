@@ -1182,5 +1182,5 @@ How I use this file: at each checkpoint, fill the matching section before moving
 
 - Delivery: exported the full report to PDF
 
-![Checkpoint 5 — Full report PDF export](Media/Stock%20Portfolio%20PowerBI%20pdf%20Export.pdf)
+(Checkpoint 5 — Full report PDF export: kept locally, not published — contains real portfolio values.)
 

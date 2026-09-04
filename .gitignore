@@ -35,3 +35,5 @@ powerbi/symbol_meta.json
 **/.pbi/
 powerbi/**/StaticResources/
 *.abf
+# Personal financial artifacts - never publish (report PDF contains real holdings/P&L)
+powerbi/PowerBI/Media/*.pdf
