@@ -2,7 +2,7 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
   "name": "f01031d9466c6c5b0fc1",
   "displayName": "Trades",
-  "displayOption": "FitToPage",
+  "displayOption": "FitToWidth",
   "height": 720,
   "width": 1280
 }
