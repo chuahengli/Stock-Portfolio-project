@@ -33,7 +33,7 @@ powerbi/symbol_meta.json
 
 # Power BI PBIP machine-local working files (caches, settings, credentials)
 **/.pbi/
-powerbi/**/StaticResources/
+powerbi/**/StaticResources/ 
 *.abf
 # Personal financial artifacts - never publish (report PDF contains real holdings/P&L)
 powerbi/PowerBI/Media/*.pdf
