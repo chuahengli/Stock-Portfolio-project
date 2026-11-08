@@ -21,12 +21,13 @@ moomoo_OpenD_9.6.5618_Windows/
 *.ipynb
 /.ipynb_checkpoints/
 
-# Windows Task Scheduler
+# Windows Task Scheduler script (machine-specific absolute paths; a
+# placeholder template is tracked as run_daily.example.bat)
 run_daily.bat
-daily_log.txt
-daily_log_prev.txt
 
------------------------------------------------------------------------------------------------
+# Daily run logs (rotated archive may be .txt.gz)
+daily_log*
+
 # Power BI (generated artifacts - rebuild with source/export_powerbi.py)
 powerbi/export/
 powerbi/*.pbix
@@ -34,7 +35,7 @@ powerbi/symbol_meta.json
 
 # Power BI PBIP machine-local working files (caches, settings, credentials)
 **/.pbi/
-powerbi/**/StaticResources/ 
+powerbi/**/StaticResources/
 *.abf
 # Personal financial artifacts - never publish (report PDF contains real holdings/P&L)
 powerbi/PowerBI/Media/*.pdf

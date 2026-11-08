@@ -111,6 +111,15 @@ def init_db():
     )
     """
 
+    # Key/value flags shared by the daily batch and the Streamlit live
+    # fragment (e.g. last daily price-update date).
+    app_meta_table = """
+    CREATE TABLE IF NOT EXISTS app_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    )
+    """
+
     # Create benchmark indices table
     benchmark_history_table = """
     CREATE TABLE IF NOT EXISTS benchmark_history (
@@ -150,6 +159,7 @@ def init_db():
         cursor.execute(transactions_table)
         cursor.execute(benchmark_history_table)
         cursor.execute(symbol_price_history_table)
+        cursor.execute(app_meta_table)
         _ensure_cashflow_income_column(conn)
         _migrate_net_p_l(conn)
 
@@ -231,6 +241,30 @@ def last_cashflow_date():
     if not df.empty and pd.notna(df.iloc[0]['d']):
         return df.iloc[0]['d']
     return None
+
+
+def get_meta(key: str, default=None):
+    with db_contextmanager() as conn:
+        row = conn.execute("SELECT value FROM app_meta WHERE key = ?", (key,)).fetchone()
+    return row[0] if row else default
+
+
+def set_meta(key: str, value: str):
+    with db_contextmanager() as conn:
+        conn.execute("INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)", (key, str(value)))
+
+
+def prices_updated_today() -> bool:
+    """True once today's index + symbol price history pass has already run."""
+    return get_meta("last_symbol_prices_update") == date.today().strftime("%Y-%m-%d")
+
+
+def missing_price_symbols():
+    """Held symbols with no rows yet in symbol_price_history (first sighting)."""
+    held = set(position_stock_symbols())
+    with db_contextmanager() as conn:
+        have = {r[0] for r in conn.execute("SELECT DISTINCT Symbol FROM symbol_price_history")}
+    return sorted(held - have)
 
 def calc_nav_units(current_date: datetime, snapshot_df: pd.DataFrame):
     total_assets = snapshot_df.loc[0, 'total_assets']

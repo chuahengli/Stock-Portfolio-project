@@ -33,6 +33,15 @@ def test_dividend_tax_is_income_not_external():
     assert inc is True
 
 
+def test_nra_and_foreign_withholding_tax_are_income():
+    # Moomoo labels dividend withholding taxes 'NRA Withholding Tax' /
+    # 'Foreign Tax Withholding' -- same economic event as 'Dividend Tax'.
+    for t in ("NRA Withholding Tax", "Foreign Tax Withholding"):
+        ext, inc = classify_cashflow(t, "")
+        assert ext is False
+        assert inc is True
+
+
 def test_cash_voucher_is_external_not_income():
     # Moomoo reward voucher: the broker gifting money = capital, NOT income.
     ext, inc = classify_cashflow("Coupon", "Cash Voucher")

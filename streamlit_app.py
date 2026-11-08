@@ -118,7 +118,10 @@ def render_live():
     """, unsafe_allow_html=True)
     if not snapshot_df.empty:
         curr = snapshot_df.iloc[0]
-        prev = prev_snapshot_df.iloc[0]
+        if prev_snapshot_df.empty:
+            prev = curr  # first-ever snapshot: no prior day exists, deltas read as zero
+        else:
+            prev = prev_snapshot_df.iloc[0]
         def get_metric_delta(curr, prev, column_name: str):
             change = round(curr[column_name] - prev[column_name],2)
             prev_val = prev[column_name]
@@ -155,6 +158,10 @@ def render_live():
         returns_str = dashboard.get_twr(portfolio_snapshots_df, inception_date, latest_date)
         
         alloc_df = snapshot_df.loc[:,['stocks','options','cash']]
+        if alloc_df.empty:
+            # Race guard: this fragment can render before the first upload of a
+            # new day lands in the cached queries -- skip this tick.
+            return
         total_assets = alloc_df.sum(axis=1).values[0]
         
 
@@ -167,21 +174,21 @@ def render_live():
             fig_trend = dashboard.plot_asset_trend(portfolio_snapshots_df)
             st.plotly_chart(fig_trend)
         with twr_trend:
-            sign = "+" if float(returns_str.replace('%', '')) >= 0 else ""
-            if float(returns_str.replace('%', '')) >= 0:
+            try:
+                twr_val = float(returns_str.replace('%', ''))
+            except ValueError:
+                twr_val = None  # 'N/A' (e.g. render tick before today's snapshot is cached)
+            if twr_val is None:
                 st.markdown(
-                    f"<span style='font-size:24px;'>Time Weighted Returns: </span>"
-                    f"<span style='color:green; font-size:24px;'>{sign}{returns_str}</span>", 
+                    f"<span style='font-size:24px;'>Time Weighted Returns: {returns_str}</span>",
                     unsafe_allow_html=True
                 )
-                #st.markdown(f"<span style='color:green; font-size:24px;'>{sign}{returns_str}</span>", unsafe_allow_html=True)
-                
             else:
-                #st.markdown(f"<span style='font-size:24px;'>Portfolio Return:</span>", unsafe_allow_html=True)
-                #st.markdown(f"<span style='color:red; font-size:24px;'>{sign}{returns_str}</span>", unsafe_allow_html=True)
+                sign = "+" if twr_val >= 0 else ""
+                colour = "green" if twr_val >= 0 else "red"
                 st.markdown(
                     f"<span style='font-size:24px;'>Time Weighted Returns: </span>"
-                    f"<span style='color:red; font-size:24px;'>{sign}{returns_str}</span>", 
+                    f"<span style='color:{colour}; font-size:24px;'>{sign}{returns_str}</span>",
                     unsafe_allow_html=True
                 )
             comparison = dashboard.comparison_df(portfolio_snapshots_df, benchmark_df)

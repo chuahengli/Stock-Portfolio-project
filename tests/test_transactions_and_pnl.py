@@ -11,6 +11,42 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from source.db import option_multiplier, transaction_gross_amount
+from source.cleanup import cleanup_historical_orders
+
+import pandas as pd
+
+
+def _raw_orders(with_filled_qty: bool):
+    d = {
+        "code": ["US.SOFI"] * 5,
+        "stock_name": ["SoFi Technologies"] * 5,
+        "order_market": ["US"] * 5,
+        "trd_side": ["BUY"] * 5,
+        "order_id": ["1", "2", "3", "4", "5"],
+        "qty": [100, 50, 30, 20, 10],
+        "price": [10.0] * 5,
+        "currency": ["USD"] * 5,
+        "updated_time": ["2026-01-02 09:30:00"] * 5,
+        "order_status": ["FILLED_ALL", "FILLED_PARTIAL",
+                         "CANCELLED_PART_FILLED", "UNFILLED", "CANCELLED"],
+    }
+    if with_filled_qty:
+        d["filled_qty"] = [100.0, 50.0, 30.0, 0.0, 0.0]
+    return pd.DataFrame(d)
+
+
+def test_partial_fills_record_the_filled_portion():
+    out = cleanup_historical_orders(_raw_orders(with_filled_qty=True))
+    assert set(out["Order_ID"]) == {"1", "2", "3"}  # UNFILLED / CANCELLED stay out
+    q = dict(zip(out["Order_ID"], out["Quantity"]))
+    assert q["1"] == 100 and q["2"] == 50 and q["3"] == 30
+
+
+def test_partial_falls_back_to_ordered_qty_without_filled_col():
+    out = cleanup_historical_orders(_raw_orders(with_filled_qty=False))
+    assert set(out["Order_ID"]) == {"1", "2", "3"}
+    q = dict(zip(out["Order_ID"], out["Quantity"]))
+    assert q["1"] == 100 and q["2"] == 50 and q["3"] == 30
 
 
 def test_option_multiplier_options():

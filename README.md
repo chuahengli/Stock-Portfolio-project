@@ -89,20 +89,26 @@ pipenv install
 ```text
 .
 ├── config/
-│   ├── __init__.py          # (empty)
+│   ├── __init__.py           # (empty)
 │   ├── settings.py           # Paths, configuration constants, env loading
 │   └── credentials.py        # Loads secure credentials, generates OpenD.xml
-├── db/                       # SQLite database storage (gitignored)
 ├── source/
 │   ├── cleanup.py            # Data transformation and cleaning logic
 │   ├── db.py                 # SQLite database interactions
 │   ├── moomoo_api.py         # Moomoo OpenD API interface
-│   └── dashboard.py          # Plotly/pandas visualization logic
+│   ├── dashboard.py          # Plotly/pandas visualization logic
+│   └── export_powerbi.py     # Exports the DB into the star-schema CSVs
+├── tests/                    # Unit tests (pytest) — pure logic, no DB/network
+├── db/                       # SQLite database storage (gitignored)
 ├── main.py                   # Entry point — fetch API data → clean → store to DB
 ├── streamlit_app.py          # Interactive Streamlit Web UI
+├── run_daily.bat             # Daily batch (gitignored — machine-specific paths)
+├── run_daily.example.bat     # Placeholder template for the daily batch
 ├── OpenD.example.xml         # Template to generate credentials-bearing OpenD.xml
 ├── Pipfile                   # Dependency definitions (pipenv)
 ├── .env.example              # Template for credential configuration
+├── AGENTS.md                 # Repo conventions for AI agents
+├── LICENSE
 ├── .gitignore                # Prevents leakage of secrets, DB, runtime binaries
 ├── powerbi/
 │   ├── export/               # 8 star-schema CSVs generated from the DB (Power BI source)

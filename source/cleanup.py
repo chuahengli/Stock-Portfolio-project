@@ -149,7 +149,20 @@ def update_portfolio_percentage(pos: pd.DataFrame, total_assets: float) -> None:
 def cleanup_historical_orders(historical_orders:pd.DataFrame):
     if historical_orders is None or historical_orders.empty:
         return pd.DataFrame(columns=['Symbol', 'Name', 'Market', 'Buy_Sell', 'Quantity', 'Order_ID', 'Current_Price', 'Currency', 'date_time'])
-    historical_orders = historical_orders.loc[historical_orders['order_status'] == 'FILLED_ALL', 
+    # A partial fill's ledger Quantity must be the FILLED portion, not the
+    # ordered size (moomoo reports the fill-so-far in 'filled_qty'; for
+    # FILLED_ALL both carry the same value). Swapped before the column
+    # selection, which drops 'filled_qty'. Falls back to 'qty' when the
+    # column is absent (older SDK payloads) -- for FILLED_ALL rows that is
+    # still exact.
+    if 'filled_qty' in historical_orders.columns:
+        historical_orders = historical_orders.copy()
+        historical_orders['qty'] = historical_orders['filled_qty'].fillna(historical_orders['qty'])
+    # Every status that carries an actual fill: fully filled, still-open
+    # partials, and orders cancelled after a partial fill. Pure CANCELLED /
+    # UNFILLED / FAILED rows never reached the market and stay out.
+    filled_statuses = {'FILLED_ALL', 'FILLED_PARTIAL', 'CANCELLED_PART_FILLED'}
+    historical_orders = historical_orders.loc[historical_orders['order_status'].isin(filled_statuses),
                                           ['code', 'stock_name','order_market', 'trd_side','order_id','qty', 'price','currency','updated_time']]
     historical_orders.rename(columns={'code': 'Symbol',
                             'stock_name':'Name',
@@ -183,6 +196,8 @@ INCOME_CASHFLOW_TYPES = {
     'Dividend',
     'Coupon',
     'Dividend Tax',     # withholding tax reduces net dividend received
+    'NRA Withholding Tax',   # non-resident withholding on US dividends
+    'Foreign Tax Withholding',
     'ADR Dividend Fee', # fee deducted alongside a dividend
     'GST',              # goods & services tax on dividend fees
 }
@@ -258,6 +273,12 @@ def separate_assets(positions:pd.DataFrame):
     return df_stocks, df_options
 
 def sum_of_mv(df:pd.DataFrame):
+    if df.empty:
+        # Empty frames (e.g. no options held): pandas apply(axis=1) on an empty
+        # frame calls the function once with a dummy all-NaN row for dtype
+        # inference -- that dummy call used to reach the FX path and fire the
+        # recurring NANSGD=X Yahoo 404 in every run. Skip it entirely.
+        return 0.0
     converted_df = df.loc[:, ['Market_Value', 'Currency']].copy()
     converted_df['Market_Value'] = converted_df.apply(
                                 lambda row: convert_currency(row['Market_Value'], row['Currency'], 'SGD'), axis=1

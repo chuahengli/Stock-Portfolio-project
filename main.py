@@ -123,13 +123,22 @@ def update_db(snapshot_df: pd.DataFrame, positions_df: pd.DataFrame, cashflow: p
     db.insert_dataframe(db.net_p_l(current_date),'net_p_l')
 
     
-    indices_dict = db.indices_dict()
-    for index_name, ticker in indices_dict.items():
-        db.update_indices(ticker)
+    # Index + per-symbol price history: ~57 yfinance downloads per pass. The
+    # Streamlit live fragment calls update_db every 10 seconds, so this is
+    # gated to once per calendar day (app_meta flag); a same-day re-run only
+    # backfills symbols seen for the first time.
+    if not db.prices_updated_today():
+        indices_dict = db.indices_dict()
+        for index_name, ticker in indices_dict.items():
+            db.update_indices(ticker)
 
-    # Price history for every stock ever held (backfills on first sighting,
-    # tops up 1mo afterwards) -- feeds the correlation work in Power BI.
-    db.update_symbol_prices_for_positions()
+        # Price history for every stock ever held (backfills on first sighting,
+        # tops up 1mo afterwards) -- feeds the correlation work in Power BI.
+        db.update_symbol_prices_for_positions()
+        db.set_meta("last_symbol_prices_update", date.today().strftime("%Y-%m-%d"))
+    else:
+        for s in db.missing_price_symbols():
+            db.update_symbol_price(s)
 
     return 0
 
