@@ -145,6 +145,20 @@ def upload_to_db(current_date: datetime, end_date: datetime, keep_opend_alive: b
     return 0
 
 
+def cashflow_start_date(today_date: datetime) -> datetime:
+    """Start of the cashflow fetch window: 30 days back, EXTENDED to just past
+    the last recorded cashflow row when a batch outage created a bigger gap
+    (a fixed window permanently misses rows once it is down longer than the
+    window). The 30-day base stays: the API filters by clearing_date, so
+    late-posted rows with older clearing dates are only caught by a wide
+    window. Clamped to START_DATE so a wiped DB still fetches full history."""
+    start = today_date - timedelta(days=30)
+    last = db.last_cashflow_date()
+    if last is not None:
+        start = min(start, datetime.strptime(last, '%Y-%m-%d') - timedelta(days=2))
+    return max(start, settings.START_DATE)
+
+
 def main():
     today_date = datetime.combine(date.today(), datetime.min.time())
     beginning_date = settings.START_DATE
@@ -153,10 +167,9 @@ def main():
     if not os.path.exists(settings.MOOMOO_PORTFOLIO_DB_PATH):
         print("Database not found. Initializing and fetching all historical data...")
         upload_to_db(today_date, beginning_date,keep_opend_alive=False)
-        
+
     else:
-        today_str = today_date.strftime("%Y-%m-%d")
-        upload_to_db(today_date, today_date - timedelta(days=30),keep_opend_alive=False)
+        upload_to_db(today_date, cashflow_start_date(today_date), keep_opend_alive=False)
     
     print("Database initialized successfully.")
     return 0

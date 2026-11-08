@@ -1,6 +1,6 @@
 expression fact_benchmark_Prev =
 		let
-		    Source = Csv.Document(Folder.Files("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export"){[Name="fact_benchmark.csv"]}[Content],[Delimiter=",", Columns=3, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+		    Source = Csv.Document(Folder.Files("C:\Users\hengl\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export"){[Name="fact_benchmark.csv"]}[Content],[Delimiter=",", Columns=3, Encoding=65001, QuoteStyle=QuoteStyle.Csv]),
 		    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
 		    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Date", type date}, {"Symbol", type text}, {"Close", type number}}),
 		    #"Sorted Rows" = Table.Sort(#"Changed Type",{{"Date", Order.Ascending}}),
@@ -29,7 +29,7 @@ expression AssetSubclass =
 
 expression fact_snapshots_prev =
 		let
-		    Source = Csv.Document(Folder.Files("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export"){[Name="fact_snapshots.csv"]}[Content],[Delimiter=",", Columns=7, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+		    Source = Csv.Document(Folder.Files("C:\Users\hengl\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export"){[Name="fact_snapshots.csv"]}[Content],[Delimiter=",", Columns=7, Encoding=65001, QuoteStyle=QuoteStyle.Csv]),
 		    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
 		    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Date", type date}, {"total_assets", type number}, {"stocks", type number}, {"options", type number}, {"cash", type number}, {"nav", type number}, {"units", Int64.Type}}),
 		    #"Sorted Rows" = Table.Sort(#"Changed Type",{{"Date", Order.Ascending}}),
@@ -48,10 +48,33 @@ expression fact_snapshots_prev =
 
 expression export =
 		let
-		    Source = Folder.Files("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export")
+		    Source = Folder.Files("C:\Users\hengl\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export")
 		in
 		    Source
 	lineageTag: 47d49670-109d-4eb4-9d51-6bf7e28c9fc1
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+
+expression 'Errors in fact_cashflow' =
+		let
+		Source = fact_cashflow,
+		  #"Detected Type Mismatches" = let
+		    tableWithOnlyPrimitiveTypes = Table.SelectColumns(Source, Table.ColumnsOfType(Source, {type nullable number, type nullable text, type nullable logical, type nullable date, type nullable datetime, type nullable datetimezone, type nullable time, type nullable duration})),
+		    recordTypeFields = Type.RecordFields(Type.TableRow(Value.Type(tableWithOnlyPrimitiveTypes))),
+		    fieldNames = Record.FieldNames(recordTypeFields),
+		    fieldTypes = List.Transform(Record.ToList(recordTypeFields), each [Type]),
+		    pairs = List.Transform(List.Positions(fieldNames), (i) => {fieldNames{i}, (v) => if v = null or Value.Is(v, fieldTypes{i}) then v else error [Message = "The type of the value does not match the type of the column.", Detail = v], fieldTypes{i}})
+		in
+		    Table.TransformColumns(Source, pairs),
+		  #"Added Index" = Table.AddIndexColumn(#"Detected Type Mismatches", "Row Number" ,1),
+		  #"Kept Errors" = Table.SelectRowsWithErrors(#"Added Index", {"cashflow_id", "Date", "Currency", "Type", "in_out", "Amount", "Remark", "is_external", "is_income", "CashflowCategory"}),
+		  #"Reordered Columns" = Table.ReorderColumns(#"Kept Errors", {"Row Number", "cashflow_id", "Date", "Currency", "Type", "in_out", "Amount", "Remark", "is_external", "is_income", "CashflowCategory"})
+		in
+		  #"Reordered Columns"
+	lineageTag: 1ed32d30-e4bf-4d20-a3ef-616d4feb690f
+	queryGroup: 'Query Errors - 3/10/2026 3:23:59 pm'
 
 	annotation PBI_NavigationStepName = Navigation
 

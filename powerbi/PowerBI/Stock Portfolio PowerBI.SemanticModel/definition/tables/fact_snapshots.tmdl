@@ -244,7 +244,7 @@ table fact_snapshots
 		mode: import
 		source =
 				let
-				    Source = Csv.Document(Folder.Files("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export"){[Name="fact_snapshots.csv"]}[Content],[Delimiter=",", Columns=7, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+				    Source = Csv.Document(Folder.Files("C:\Users\hengl\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export"){[Name="fact_snapshots.csv"]}[Content],[Delimiter=",", Columns=7, Encoding=65001, QuoteStyle=QuoteStyle.Csv]),
 				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
 				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Date", type date}, {"total_assets", type number}, {"stocks", type number}, {"options", type number}, {"cash", type number}, {"nav", type number}, {"units", Int64.Type}}),
 				    #"Sorted Rows" = Table.Sort(#"Changed Type",{{"Date", Order.Ascending}}),

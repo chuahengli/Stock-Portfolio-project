@@ -150,7 +150,7 @@ table fact_positions
 		mode: import
 		source =
 				let
-				    Source = Csv.Document(Folder.Files("C:\Users\user\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export"){[Name="fact_positions.csv"]}[Content],[Delimiter=",", Columns=13, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+				    Source = Csv.Document(Folder.Files("C:\Users\hengl\Hermes Workspace\Stock Market, Finance\Stock Portfolio project\powerbi\export"){[Name="fact_positions.csv"]}[Content],[Delimiter=",", Columns=13, Encoding=65001, QuoteStyle=QuoteStyle.Csv]),
 				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
 				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Date", type date}, {"Symbol", type text}, {"Name", type text}, {"Market", type text}, {"Quantity", type number}, {"Market_Value", type number}, {"Diluted_Cost", type number}, {"Current_Price", type number}, {"P_L_Percent", type number}, {"P_L", type number}, {"Today_s_P_L", type number}, {"Currency", type text}, {"Portfolio_Percent", Percentage.Type}}),
 				    #"Divided Column" = Table.TransformColumns(#"Changed Type", {{"P_L_Percent", each _ / 100, type number}}),

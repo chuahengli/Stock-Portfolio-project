@@ -121,7 +121,13 @@ def render_live():
         prev = prev_snapshot_df.iloc[0]
         def get_metric_delta(curr, prev, column_name: str):
             change = round(curr[column_name] - prev[column_name],2)
-            percentage_change = (curr[column_name] - prev[column_name]) / prev[column_name]
+            prev_val = prev[column_name]
+            if pd.isna(prev_val) or prev_val == 0:
+                # % change is undefined against a zero base (e.g. options were
+                # 0 the day before and re-opened) -- show the absolute change
+                # instead of crashing the metrics row with ZeroDivisionError.
+                return curr[column_name], f"{change} (n/a)"
+            percentage_change = (curr[column_name] - prev_val) / prev_val
             delta = f"{change} ({percentage_change:.2%})" if percentage_change != 0 else f"{change} (0.0%)"
             return curr[column_name], delta
         

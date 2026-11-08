@@ -6,9 +6,14 @@ model Model
 		legacyRedirects
 		returnErrorValuesAsNull
 
+/// Errors in queries that were loaded on 3/10/2026 3:23:59 pm.
+queryGroup 'Query Errors - 3/10/2026 3:23:59 pm'
+
+	annotation PBI_QueryGroupOrder = 0
+
 annotation __PBI_TimeIntelligenceEnabled = 1
 
-annotation PBI_QueryOrder = ["dim_date","dim_symbol","fact_benchmark","fact_benchmark_Prev","fact_cashflow","fact_positions","fact_snapshots","fact_snapshots_prev","fact_trades","AssetSubclass","fact_prices","export"]
+annotation PBI_QueryOrder = ["dim_date","dim_symbol","fact_benchmark","fact_benchmark_Prev","fact_cashflow","fact_positions","fact_snapshots","fact_snapshots_prev","fact_trades","AssetSubclass","fact_prices","export","Errors in fact_cashflow"]
 
 annotation PBI_ProTooling = ["DevMode"]
 

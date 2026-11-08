@@ -180,33 +180,74 @@ def read_db(query:str):
         df = pd.read_sql_query(query, conn)
     return df
         
-def prev_nav_units():
-    query = "SELECT nav, units FROM portfolio_snapshots ORDER BY date DESC LIMIT 1"
+def prev_nav_units(before_date: str = None):
+    """Latest nav/units, optionally strictly BEFORE a date ('YYYY-MM-DD').
+
+    calc_nav_units passes today's date: on a same-day re-run today's row is
+    already in the table, and using it as 'previous' drifts NAV whenever net
+    cash flow is non-zero (units would compound on every rerun).
+    """
+    if before_date:
+        query = f"SELECT nav, units FROM portfolio_snapshots WHERE date < '{before_date}' ORDER BY date DESC LIMIT 1"
+    else:
+        query = "SELECT nav, units FROM portfolio_snapshots ORDER BY date DESC LIMIT 1"
     prev_df = read_db(query)
     if prev_df.empty:
         return 0, 0
     return prev_df.loc[0, 'nav'], prev_df.loc[0, 'units']
 
 
-def net_cashflow(date_str: str):
-    query = f"SELECT cashflow_id, Date, Currency, Amount FROM cashflow where Date = '{date_str}' AND is_external = 1"
-    today_cf_df = read_db(query)
-    if not today_cf_df.empty:
-        today_cf_df['Amount'] = today_cf_df.apply(lambda x: convert_currency(x['Amount'], x['Currency'], 'SGD'), axis=1)
-    net_cash_flow = today_cf_df['Amount'].sum() if not today_cf_df.empty else 0.0
-    return net_cash_flow
+def net_cashflow(start_date_exclusive: str, end_date: str):
+    """Net EXTERNAL cash flow (converted to SGD) in (start_date_exclusive, end_date].
+
+    calc_nav_units passes (previous snapshot date, today): flows that landed on
+    days WITHOUT a snapshot (weekends, batch outages) must be captured here --
+    the old same-date-only lookup silently dropped them forever, polluting
+    NAV/units. Flows ON the start date are excluded: they were already counted
+    in that snapshot's own units (no double count)."""
+    query = (
+        f"SELECT cashflow_id, Date, Currency, Amount FROM cashflow "
+        f"WHERE Date > '{start_date_exclusive}' AND Date <= '{end_date}' "
+        f"AND is_external = 1"
+    )
+    cf_df = read_db(query)
+    if not cf_df.empty:
+        cf_df['Amount'] = cf_df.apply(lambda x: convert_currency(x['Amount'], x['Currency'], 'SGD'), axis=1)
+        return float(cf_df['Amount'].sum())
+    return 0.0
+
+
+def prev_snapshot_date(before_date: str):
+    """Latest snapshot date STRICTLY BEFORE before_date ('YYYY-MM-DD'), or None."""
+    df = read_db(f"SELECT MAX(date) AS d FROM portfolio_snapshots WHERE date < '{before_date}'")
+    if not df.empty and pd.notna(df.iloc[0]['d']):
+        return df.iloc[0]['d']
+    return None
+
+
+def last_cashflow_date():
+    """Latest cashflow clearing date in the DB (None when the table is empty)."""
+    df = read_db("SELECT MAX(Date) AS d FROM cashflow")
+    if not df.empty and pd.notna(df.iloc[0]['d']):
+        return df.iloc[0]['d']
+    return None
 
 def calc_nav_units(current_date: datetime, snapshot_df: pd.DataFrame):
     total_assets = snapshot_df.loc[0, 'total_assets']
-    # Based on today's cash flow, DO the NAV calculation
+    # Based on cash flow since the previous snapshot, DO the NAV calculation
     date_str = current_date.strftime('%Y-%m-%d')
-    net_cf = net_cashflow(date_str)
-    prev_nav, prev_units = prev_nav_units()
-    if prev_units == 0:
+    prev_date = prev_snapshot_date(date_str)
+    prev_nav, prev_units = prev_nav_units(date_str)
+    if prev_units == 0 or prev_date is None:
         # First entry
         new_units = 1000.0
         new_nav = total_assets / new_units
+        net_cf = 0.0
     else:
+        # ALL external flows since the previous snapshot adjust NAV *units* at
+        # today's NAV (daily-granularity TWR treatment). Flows that landed on
+        # days without a snapshot are picked up by the window, not lost.
+        net_cf = net_cashflow(prev_date, date_str)
         # New NAV = (Ending Value - Net Cash Flow) / Previous Units
         # NAV only changed with market movement, not cash flow in/out
         new_nav = (total_assets - net_cf) / prev_units

@@ -67,8 +67,14 @@ def cleanup_positions(positions:pd.DataFrame):
                             'pl_val':'P_L',
                             'today_pl_val':"Today_s_P_L",
                             'currency':'Currency'}, inplace=True)
-    # Remove rows where Market_Value is 0
-    positions = positions[positions['Market_Value'] != 0]
+    # Drop rows with a zero / NaN market value or missing currency. NaN fails
+    # the '!= 0' test (NaN != 0 is True), so a placeholder API row with a NaN
+    # currency used to slip through into the FX path (the recurring NANSGD=X
+    # Yahoo 404) and would be summed at face value.
+    positions = positions[
+        positions['Market_Value'].notna() & (positions['Market_Value'] != 0)
+        & positions['Currency'].notna()
+    ]
     # Renamed Symbol to exclude XX.AMZN...f
     positions['Symbol'] = positions['Symbol'].apply(extract_ticker)
     return positions
@@ -76,9 +82,19 @@ def cleanup_positions(positions:pd.DataFrame):
 # Cache last 16, and every hour, according to datetime object
 @functools.lru_cache(maxsize=16)
 def get_exchange_rate(from_currency:str,to_currency:str,current_hour_tag):
-    if from_currency == to_currency:
+    fc = str(from_currency).strip().upper()
+    tc = str(to_currency).strip().upper()
+    if fc == tc:
         return 1.0
-    ticker = f"{from_currency}{to_currency}=X" if to_currency != 'USD' else f"{from_currency}=X"
+    # Guard against garbage codes reaching Yahoo: a NaN currency stringifies to
+    # 'nan' (isalpha and 3 letters!), which produced the recurring NANSGD=X 404
+    # and would silently convert at the 1.0 fallback below.
+    def _valid(code: str) -> bool:
+        return len(code) == 3 and code.isalpha() and code != 'NAN'
+    if not (_valid(fc) and _valid(tc)):
+        print(f"Warning: invalid currency pair ({from_currency!r} -> {to_currency!r}) - using rate 1.0")
+        return 1.0
+    ticker = f"{fc}{tc}=X" if tc != 'USD' else f"{fc}=X"
     try:
         price_data = yf.download(tickers=ticker, period='1d',
                                 auto_adjust=True,
@@ -92,12 +108,12 @@ def get_exchange_rate(from_currency:str,to_currency:str,current_hour_tag):
             return price_data['Close'].ffill().iloc[-1].round(decimals=3).item()
         # Set fallbacks and get approx value
         fallbacks = {"USD": {"SGD": 1.28}, "SGD": {"USD": 0.78}}
-        return fallbacks.get(from_currency, {}).get(to_currency, 1.0)
+        return fallbacks.get(fc, {}).get(tc, 1.0)
     
     except Exception as e:
         print(f"Error fetching exchange rate: {e}")
         # Return a safe fallback so the dashboard doesn't break
-        return 1.28 if from_currency == "USD" and to_currency == "SGD" else 0.78 if from_currency == "SGD" and to_currency == "USD" else 1.0
+        return 1.28 if fc == "USD" and tc == "SGD" else 0.78 if fc == "SGD" and tc == "USD" else 1.0
 
     
             
@@ -118,7 +134,14 @@ def update_portfolio_percentage(pos: pd.DataFrame, total_assets: float) -> None:
     if total_assets == 0:
         pos['Portfolio_Percent'] = 0.0
     else:
-        pos['Portfolio_Percent'] = (convert_currency(pos['Market_Value'],"USD","SGD") / total_assets * 100).round(2)
+        # Convert each row with its OWN currency (total_assets is SGD).
+        # Was hardcoded "USD"->"SGD", which multiplied SGD-denominated rows
+        # (SGX names like 5E2/OU8) by the USD/SGD rate and inflated their
+        # portfolio % by ~28%.
+        mv_sgd = pos.apply(
+            lambda row: convert_currency(row['Market_Value'], row['Currency'], 'SGD'), axis=1
+        )
+        pos['Portfolio_Percent'] = (mv_sgd / total_assets * 100).round(2)
         pos['Portfolio_Percent'] = pos['Portfolio_Percent'].apply(
             lambda x: f"{x:.2f}%"
         )

@@ -363,6 +363,9 @@ def build_fact_cashflow(conn: sqlite3.Connection) -> pd.DataFrame:
             return "Dividend Income"
         return "Internal"
     df["CashflowCategory"] = df.apply(_flow, axis=1)
+    # Remarks come from moomoo and can carry trailing newlines; a newline inside a
+    # quoted CSV field breaks line-oriented readers (bit 2026-10-03: OU8 dividend).
+    df["Remark"] = df["Remark"].fillna("").astype(str).str.strip()
     return df
 
 

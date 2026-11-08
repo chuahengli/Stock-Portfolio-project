@@ -108,6 +108,8 @@ def get_positions(trade_obj: OpenSecTradeContext):
 def account_cashflow(trade_obj: OpenSecTradeContext, current_date: datetime, end_date: datetime):
     cash_flow_list = []
     request_count = 0
+    consecutive_errors = 0
+    max_consecutive_errors = 5  # a dead OpenD/API must abort, not hang the batch forever
     start_time = time.time()
     
     while end_date <= current_date:
@@ -126,13 +128,18 @@ def account_cashflow(trade_obj: OpenSecTradeContext, current_date: datetime, end
         ret, data = trade_obj.get_acc_cash_flow(clearing_date=date_str, trd_env="REAL")
 
         if ret == moomoo.RET_OK:
+            consecutive_errors = 0
             if not data.empty:
                 cash_flow_list.append(data)
             request_count += 1
             current_date -= timedelta(days=1)
 
         elif ret == moomoo.RET_ERROR:
-            print(f"Error on {date_str}: {data}")
+            consecutive_errors += 1
+            print(f"Error on {date_str} (consecutive {consecutive_errors}/{max_consecutive_errors}): {data}")
+            if consecutive_errors >= max_consecutive_errors:
+                print("Too many consecutive cashflow errors - aborting this fetch (partial data kept).")
+                break
             time.sleep(30)
             start_time = time.time()
             request_count = 0
