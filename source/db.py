@@ -5,6 +5,7 @@ import sqlite3
 import pandas as pd
 from datetime import datetime, date
 import re
+import uuid
 import numpy as np
 from contextlib import contextmanager
 import yfinance as yf
@@ -13,12 +14,19 @@ import functools
 # Manage the open and close of database
 @contextmanager
 def db_contextmanager():
-    conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH),check_same_thread=False)
+    """Open a connection; commit on success, roll back and re-raise on error."""
+    conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH), check_same_thread=False)
     try:
         conn.execute("PRAGMA journal_mode=WAL;")
+        # FKs are unenforced in SQLite unless set per connection.
+        conn.execute("PRAGMA foreign_keys=ON;")
         yield conn
-    finally:
+    except Exception:
+        conn.rollback()
+        raise
+    else:
         conn.commit()
+    finally:
         conn.close()
 
 
@@ -173,17 +181,23 @@ def table_empty(table_name:str):
         return count == 0
 
 def insert_dataframe(df:pd.DataFrame, table_name:str):
+    """Upsert a DataFrame into `table_name`.
+
+    The staging table name is unique per call: a fixed name is shared global
+    state, so two concurrent writers would clobber each other mid-upsert.
+    """
+    staging = f"temp_staging_{uuid.uuid4().hex}"
     with db_contextmanager() as conn:
         # Upload DataFrame to a staging table
-        df.to_sql('temp_staging', conn, if_exists='replace', index=False)
+        df.to_sql(staging, conn, if_exists='replace', index=False)
         # Define columns in df to place in columns in sql db table
         cols = ",".join(df.columns)
         # Transfer data to the main table using INSERT OR REPLACE for an "upsert" operation
         conn.execute(f"""
             INSERT OR REPLACE INTO {table_name} ({cols})
-            SELECT {cols} FROM temp_staging
+            SELECT {cols} FROM {staging}
         """)
-        conn.execute("DROP TABLE temp_staging")
+        conn.execute(f"DROP TABLE {staging}")
 
 def read_db(query:str):
     with db_contextmanager() as conn:

@@ -1,166 +1,212 @@
-# 📈 Moomoo Portfolio Tracker & Analyzer
+# Moomoo Portfolio Tracker
 
-A tool that interfaces with the **Moomoo OpenD gateway** to store portfolio data into a local SQLite database and display a dashboard using **Streamlit**. This project is designed to automatically track daily portfolio value, positions, cash flow, and historical orders to calculate Time-Weighted Returns.
+Connects to a moomoo (Futu) brokerage account, saves a daily snapshot of the portfolio
+to a local SQLite file, and reports it two ways: a Streamlit dashboard and a Power BI
+report.
 
-## ✨ Features
+![Overview page](powerbi/PowerBI/Media/Checkpoint%203%20-%20Page%201.png)
 
-- **Real-time Monitoring:** Dashboard auto-refreshes every 10 seconds
-- **Historical Performance:** Tracks daily snapshots of portfolio in database
-- **Visualisation:** Plotly-based interactive dashboard for portfolio metrics and allocation
-- **Secure Credential Isolation:** Credentials live outside the project tree — safe for AI-assisted development environments
-- **Time-Weighted Return from inception:** TWR anchors to the earliest recorded snapshot (your tracking start date), not a hardcoded value
-- **Dividend & Coupon attribution:** cash flows are classified as *external capital* (deposits/withdrawals → adjust NAV units) vs *investment income* (dividends/coupons/taxes → count toward return), so income is no longer mislabelled as capital or silently dropped. Cumulative income is charted on the dashboard
-- **Unit tests:** `tests/` covers cash-flow classification and TWR inception logic (`python -m pytest tests/ -q`)
-- **Date-stamped realized P/L:** the `net_p_l` table now carries a `date`, so realized P/L snapshots are preserved day-to-day instead of being overwritten; the dashboard shows the latest date
-- **Buy/Sell audit ledger:** a `transactions` table (built from `historical_orders` each run) records every fill with multiplier-aware, sign-conventioned `Gross_Amount`; surfaced in a "Trade Ledger" dashboard tab
-- **Bounded daily log:** `main.py` now logs concise summaries instead of full dataframes, and `run_daily.bat` auto-rotates `daily_log.txt` (keeps one previous archive) when it exceeds 10 MB
+> Screenshot shows allocation percentages and indexed performance only — dollar amounts, holdings and trade details are omitted.
 
-## 🛠️ Prerequisites
+## What it does
 
-Before running this project, you need the following:
+| Capability | Detail |
+| --- | --- |
+| **Daily tracking** | Snapshot of total assets, equity, options and cash, written once per run |
+| **Time-weighted return** | NAV/unit unitisation anchored to the first recorded snapshot, so deposits don't flatter performance |
+| **Cash-flow classification** | Each flow labelled external capital (deposit/withdrawal), investment income (dividend/coupon/tax), or internal (FX, fund subscription) |
+| **Multi-currency** | Positions in USD and SGD, converted to one base currency for reporting |
+| **Trade ledger** | Every fill recorded with sign convention and the options ×100 multiplier applied |
+| **Options aware** | OCC-style contract symbols parsed for underlying, expiry and strike |
+| **Streamlit dashboard** | Four tabs: **Overview** (asset trend, return vs benchmark, sector/country/market-cap breakdown, dividend income), **Positions** (live holdings with P/L), **P/L Analysis** (net P/L by market, stock vs option), **Trade Ledger** (every fill) |
+| **Power BI report** | Three pages: **Overview** (allocation, portfolio vs benchmark growth), **Risks** (volatility, drawdown, Beta, Sharpe, Sortino, VaR, Expected Shortfall, correlation heatmap), **Trades** (ledger and cash-flow matrix), all period-filterable |
 
-1. **Python 3.10+**
-2. **Moomoo Account** with OpenD API access
-3. **RSA Key Pair** — generated via [Moomoo's Protocol Encryption Process](https://openapi.moomoo.com/moomoo-api-doc/en/qa/other.html#1479)
+## Architecture
 
-## 🚀 Installation & Setup
+```
+moomoo OpenD gateway
+        │
+        ▼
+     main.py
+        │
+        ▼
+  db/moomoo_portfolio.db  (SQLite)
+        │
+   ┌────┴────┐
+   ▼         ▼
+streamlit  export_powerbi.py → powerbi/export/*.csv → Power BI
+```
 
-### 1. Clone the Repository
+## Setup
+
+**Prerequisites:**
+- **Python 3.12** (`Pipfile`)
+- **moomoo account with OpenAPI access** (defaults to Moomoo SG / SGD in `source/moomoo_api.py` via `security_firm="FUTUSG"`, `currency="SGD"`)
+- **1024-bit PKCS#1 RSA private key** (no passphrase), generated via [moomoo's protocol encryption guide](https://openapi.moomoo.com/moomoo-api-doc/en/qa/other.html)
+
+### 1. Install dependencies
 
 ```bash
 git clone https://github.com/chuahengli/Stock-Portfolio-project.git
+cd Stock-Portfolio-project
+pip install pipenv
+pipenv install --dev
 ```
 
-### 2. Set Up the Moomoo OpenD Gateway
+### 2. Download the OpenD gateway
 
-The moomoo OpenD gateway (`OpenD.exe`) is a Windows binary that logs into your moomoo account and exposes a local API. The OpenD folder is **not** stored in the project directory — it lives in a secure location on your host machine to keep credentials isolated.
+Download OpenD from **[moomoo.com/download/OpenAPI](https://www.moomoo.com/download/OpenAPI)**
+(version ≥ 10.11 to match the locked `moomoo-api` SDK) and extract it outside the repo
+(for example `C:\Users\YourName\.ssh\moomoo_OpenD_Windows`).
 
-1. Move the `moomoo_OpenD_9.6.5618_Windows` folder to:
-   ```
-   C:\Users\<you>\.ssh\moomoo_OpenD_9.6.5618_Windows\
-   ```
-2. The `OpenD.example.xml` template at the project root is used by `config/credentials.py` to generate the real `OpenD.xml` at runtime
-3. The XML will be populated with your credentials from the `.env` file at runtime
+### 3. Store credentials in the OS keyring
 
-### 3. RSA Key Generation
+Credentials are stored in your OS credential store (Windows Credential Manager, macOS
+Keychain, or Linux Secret Service) — never in the repository:
 
-1. Generate a private/public key pair by following [Moomoo's Protocol Encryption Process](https://openapi.moomoo.com/moomoo-api-doc/en/qa/other.html#1479)
-2. Save the private key to a text file (e.g. `C:\Users\<you>\.ssh\moomoo_api_private_key.txt`)
-3. Reference this file path in your `.env` (see below)
+```bash
+pipenv run python -m config.credentials setup
+```
+
+Enter your **moomoo login** (ID/email/phone), **password** (input is hidden), and **RSA
+private key path**. Check or clear stored entries anytime with:
+
+```bash
+pipenv run python -m config.credentials status
+pipenv run python -m config.credentials clear
+```
+
+<details>
+<summary><b>Headless / CI fallback (no OS keyring)</b></summary>
+
+Set `MOOMOO_LOGIN_ACCOUNT`, `MOOMOO_LOGIN_PWD`, and `MOOMOO_RSA_KEY` in `.env`.
+`get_secret()` falls back to environment variables only when no keyring entry exists.
+</details>
 
 ### 4. Configure `.env`
 
-1. Rename `.env.example` → `.env`
-2. Fill in your credentials:
+```bash
+cp .env.example .env
+```
+
+Edit `.env` — set your tracking start date and uncomment `OPEND_DIR` to point at your
+extracted OpenD folder from step 2:
 
 ```bash
-# Path to your RSA private key file
-MOOMOO_RSA_KEY=C:\Users\YourName\.ssh\moomoo_api_private_key.txt
-
-# Your moomoo login account (user ID, phone number, or email)
-MOOMOO_LOGIN_ACCOUNT=YOUR_LOGIN_ACCOUNT_HERE
-
-# Your moomoo login password (plain text — used to generate OpenD.xml at runtime)
-MOOMOO_LOGIN_PWD=your_password
-
-# Path to the moomoo_OpenD folder
-OPEND_DIR=C:\Users\YourName\.ssh\moomoo_OpenD_9.6.5618_Windows
-
-# Date you opened your Moomoo account (YYYY-MM-DD)
-START_DATE="YYYY-MM-DD"
+START_DATE="2024-01-01"
+OPEND_DIR=C:\Users\YourName\.ssh\moomoo_OpenD_Windows
 ```
 
-> **Why this structure?**
-> - The `.env` file is in `.gitignore` and never committed
-> - The OpenD folder (with `OpenD.xml`) lives outside the project tree
-> - At runtime, `config/credentials.py` reads the `.env`, generates the real `OpenD.xml` from the template, then starts OpenD — so credentials never sit in the project directory
+> At runtime, `config/credentials.py` combines `OpenD.example.xml` with your keyring credentials to generate `OpenD.xml` inside `OPEND_DIR`. On a new machine, launch `OpenD.exe` once manually to accept any initial agreement or SMS device verification (`input_phone_verify_code -code=123456`), then close it — `main.py` manages OpenD automatically after that.
 
-### 5. Install Dependencies
-
-This project uses `pipenv` for dependency management:
-
-```bash
-pip install pipenv
-pipenv install
-```
-
-## 📂 Project Structure
-
-```text
-.
-├── config/
-│   ├── __init__.py           # (empty)
-│   ├── settings.py           # Paths, configuration constants, env loading
-│   └── credentials.py        # Loads secure credentials, generates OpenD.xml
-├── source/
-│   ├── cleanup.py            # Data transformation and cleaning logic
-│   ├── db.py                 # SQLite database interactions
-│   ├── moomoo_api.py         # Moomoo OpenD API interface
-│   ├── dashboard.py          # Plotly/pandas visualization logic
-│   └── export_powerbi.py     # Exports the DB into the star-schema CSVs
-├── tests/                    # Unit tests (pytest) — pure logic, no DB/network
-├── db/                       # SQLite database storage (gitignored)
-├── main.py                   # Entry point — fetch API data → clean → store to DB
-├── streamlit_app.py          # Interactive Streamlit Web UI
-├── run_daily.bat             # Daily batch (gitignored — machine-specific paths)
-├── run_daily.example.bat     # Placeholder template for the daily batch
-├── OpenD.example.xml         # Template to generate credentials-bearing OpenD.xml
-├── Pipfile                   # Dependency definitions (pipenv)
-├── .env.example              # Template for credential configuration
-├── AGENTS.md                 # Repo conventions for AI agents
-├── LICENSE
-├── .gitignore                # Prevents leakage of secrets, DB, runtime binaries
-├── powerbi/
-│   ├── export/               # 8 star-schema CSVs generated from the DB (Power BI source)
-│   ├── POWERBI_ROADMAP.md    # Power BI learning track — course contract + archive
-│   └── PowerBI/              # PBIP report + semantic model, NOTES.md journal, Media/
-└── README.md
-```
-
-## 📊 Power BI Reporting
-
-A full Power BI report built on the same data — a star-schema semantic model loaded from 8
-generated CSVs (`powerbi/export/`), written as a **PBIP project** (model + report definition
-committed in this repo, no opaque .pbix). Refresh is a folder connector over the export
-directory: re-run `pipenv run python -m source.export_powerbi --no-enrich` and hit Refresh.
-
-**3 report pages (1280×720):**
-
-| Page | Contents |
-| ---- | -------- |
-| Overview | Assets, cash/stocks/options allocation, portfolio vs benchmark growth, sector & country allocation |
-| Risks | Volatility, max drawdown, Beta vs S&P 500, Sortino, Sharpe, Historical VaR (95%), Expected Shortfall (95%), Calmar, Tracking Error, Information Ratio, correlation heatmap, daily-return histogram, symbol allocation treemap |
-| Trades | Full buy/sell ledger + net trade cash-flow matrix, filterable by period |
-
-**30 DAX measures**, every one QA'd against Python recomputation from the raw CSVs
-(e.g. Historical VaR 95% = −5.57%, Expected Shortfall = −7.78%, worst single day on record
-−15.5%). Period slicing is a disconnected-table window system (1W / 1M / 3M / 6M / YTD / ALL)
-applied inside each measure. The learning track and measure designs are documented in
-[`powerbi/POWERBI_ROADMAP.md`](powerbi/POWERBI_ROADMAP.md) with a user-written journal in
-[`powerbi/PowerBI/NOTES.md`](powerbi/PowerBI/NOTES.md).
-
-| Overview page | Risks page |
-| ------------- | ---------- |
-| ![Overview page](powerbi/PowerBI/Media/Checkpoint%203%20-%20Page%201.png) | ![Risks page](powerbi/PowerBI/Media/Checkpoint%204%20-%20Page%202.png) |
-
-> Screenshots are redacted for privacy — portfolio values, holdings and trade details are hidden; the full-res interactive report is not published.
-
-## 📊 Usage
-
-### Initialize / Update Database
-
-Run the main script to fetch historical cashflow data and today's snapshot:
+### 5. First run (backfill database)
 
 ```bash
 pipenv run python main.py
 ```
 
-On first run this fetches all historical data since `START_DATE`. Subsequent runs update only the last 30 days.
+This creates `db/moomoo_portfolio.db`, backfills cash flows since `START_DATE`
+(rate-limited by moomoo to 20 days per 30 seconds — a multi-year backfill takes ~15–30
+minutes), and records today's snapshot:
 
-### Launch Dashboard
+```
+Update Complete. New NAV: 25.0000, Net CF: 0.00, New Units: 1000.0000
+Database updated successfully.
+```
+
+### 6. Open the dashboard (or Power BI report)
 
 ```bash
 pipenv run streamlit run streamlit_app.py
 ```
 
-The dashboard auto-refreshes every 10 seconds in Live Mode. Toggle it off to freeze the view.
+**Live Mode** (top toggle, on by default) re-reads SQLite every 10 seconds.
+
+**Optional — Power BI report:**
+1. Export the 8 star-schema CSVs: `pipenv run python -m source.export_powerbi`
+2. Open `powerbi/PowerBI/Stock Portfolio PowerBI.pbip` in Power BI Desktop.
+3. In **Transform data → Data source settings**, repoint the CSV folder to your local
+   `powerbi/export/` directory and click **Refresh**.
+
+## Running after that
+
+Subsequent runs only fetch the last 30 days (extended automatically if the machine was
+off longer). Use either mode independently:
+
+- **Option A — From the dashboard:** Click **Refresh from broker** in the Streamlit
+  sidebar. It runs `main.py` as a subprocess and reloads the page.
+- **Option B — Scheduled batch (no dashboard needed):** Copy `run_daily.example.bat` to
+  `run_daily.bat`, replace `<PROJECT_DIR>` with your repo path, and schedule it in
+  Windows Task Scheduler under your Windows user account. It updates SQLite, refreshes
+  `powerbi/export/*.csv`, and logs to `logs/daily_log.txt` (auto-rotated at 10 MB).
+
+## Project structure
+
+```text
+.
+├── config/
+│   ├── settings.py           # Paths and non-secret settings (.env)
+│   └── credentials.py        # OS keyring CLI + runtime OpenD.xml generator
+├── source/
+│   ├── moomoo_api.py         # OpenD process lifecycle and broker queries
+│   ├── cleanup.py            # API DataFrame cleaning and cash-flow classification
+│   ├── db.py                 # SQLite schema, upserts, NAV/unit TWR, price history
+│   ├── dashboard.py          # Plotly figures and table formatting
+│   └── export_powerbi.py     # SQLite → 8 star-schema CSVs for Power BI
+├── tests/                    # Pure-logic unit tests (pytest)
+├── powerbi/
+│   ├── PowerBI/              # PBIP report and semantic model (36 DAX measures)
+│   ├── POWERBI_ROADMAP.md    # Star-schema export contract and measure notes
+│   ├── verify_export.py      # CSV schema and BOM checker
+│   └── verify_te_ir.py       # Tracking Error / Information Ratio DAX verifier
+├── main.py                   # Batch entry point (sole database writer)
+├── streamlit_app.py          # Streamlit dashboard (read-only)
+├── OpenD.example.xml         # OpenD configuration template
+├── run_daily.example.bat     # Windows Task Scheduler batch template
+├── .env.example              # Non-secret settings template
+└── Pipfile
+```
+
+Generated at runtime (gitignored): `db/`, `logs/`, `powerbi/export/`,
+`powerbi/symbol_meta.json`, `OpenD.xml`, `.env`, `run_daily.bat`.
+
+## Data model
+
+| Table | Grain | Role |
+| --- | --- | --- |
+| `portfolio_snapshots` | one row per run | Source: total assets, stocks, options, cash, NAV, units |
+| `positions` | symbol × date | Source: quantity, cost, market value, unrealised P/L |
+| `historical_orders` | order | Source: raw fills |
+| `cashflow` | cash-flow entry | Source: classified deposits, dividends, taxes |
+| `transactions` | order | Derived: sign-conventioned, multiplier-aware ledger |
+| `net_p_l` | date × symbol × market × currency | Derived: realised and unrealised P/L |
+| `benchmark_history` | date × index | Source: daily closes for 8 benchmark indices |
+| `symbol_price_history` | date × symbol | Source: daily closes for every equity ever held |
+| `app_meta` | key | Internal: state flags (e.g. `last_symbol_prices_update`) |
+
+`Source` tables store broker and Yahoo Finance history; `Derived` tables are rebuilt on
+every run.
+
+## How to run the tests
+
+```bash
+pipenv run python -m pytest tests/ -q
+```
+
+29 pure-logic tests (~2 seconds, no database, network, or broker account required)
+covering cash-flow classification, TWR unitisation, partial-fill order handling, option
+multipliers, and trade-ledger sign conventions.
+
+## Known limitations
+
+- **Windows-first:** `source/moomoo_api.py` manages `OpenD.exe` by its Windows binary
+  name and the scheduled job is a `.bat` script; macOS/Linux requires changing the
+  binary name (`OpenD`) and using cron/systemd.
+- **Separate gateway binary:** OpenD (~100 MB), an RSA keypair, broker OpenAPI approval,
+  and a one-time manual device login are required before automated runs work.
+- **Single account, Moomoo SG / SGD base:** `security_firm="FUTUSG"` and SGD conversion
+  are the defaults; other regions or base currencies require changing
+  `source/moomoo_api.py` and the conversion target.
+- **Broker history depth:** Order history may not reach as far back as cash-flow
+  history, so early realised P/L can be incomplete.
+- **Local file storage:** Single-user SQLite file on disk with no cloud sync or hosting.

@@ -62,17 +62,20 @@ def ensure_opend_is_ready():
 
 
 def configure_moomoo_api():
-    # Get the RSA key path from environment variables (set by secure .env)
-    key_path = os.getenv("MOOMOO_RSA_KEY")
+    """Create the trade context using the keyring-backed RSA key path."""
+    from config.credentials import get_secret
+
+    key_path = get_secret("rsa_key_path")
     if not key_path:
-        # Fallback: try the old KEY_PATH variable for backward compat
-        key_path = os.getenv("KEY_PATH")
-    if not key_path:
-        print("Warning: MOOMOO_RSA_KEY not set — API encryption may fail.")
-    # 1. Configure the RSA private key file globally
+        raise RuntimeError(
+            "No RSA private key path configured. Run:\n"
+            "    python -m config.credentials setup"
+        )
+    # A .env value may arrive with literal backslash escaping.
+    key_path = key_path.replace("\\\\", "\\")
+
     moomoo.SysConfig.set_init_rsa_file(key_path)
-    # 2. Create the trade context and enable encryption
-    # is_encrypt=True encrypts using RSA key above
+    # 2. Create the trade context (is_encrypt uses the RSA key set above)
     trade_ctx = OpenSecTradeContext(
         host='127.0.0.1',
         port=11111,

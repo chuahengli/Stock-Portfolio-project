@@ -3,11 +3,25 @@
 
 ## Architecture
 
-- Data pipeline: moomoo OpenD -> data cleaning -> main.py -> SQLite (`db/moomoo_portfolio.db`).
+- Data pipeline: moomoo OpenD -> cleaning -> main.py -> SQLite (`db/moomoo_portfolio.db`).
+- `main.py` is the SINGLE writer. The Streamlit dashboard is read-only.
 - Two output layers on the SAME database:
-  1. Streamlit dashboard (live, operational): `streamlit_app.py`
-  2. Power BI analysis/reporting layer: `source/export_powerbi.py` ->
-     `powerbi/export/*.csv`, `Stock Portfolio project\powerbi\PowerBI` powerBI project files with images
+  1. Streamlit dashboard (operational): `streamlit_app.py`
+  2. Power BI analysis/reporting: `source/export_powerbi.py` ->
+     `powerbi/export/*.csv`, `powerbi/PowerBI` PBIP project files with images
+
+## Credentials
+
+- Secrets live in the OS keyring (Windows Credential Manager / Keychain /
+  Secret Service). Resolve them ONLY via `config.credentials.get_secret(field)`.
+  Never read `os.getenv` for a secret in new code, and never print a resolved value.
+- Setup: `python -m config.credentials setup` | `status` | `clear`
+- The env vars (`MOOMOO_LOGIN_ACCOUNT`, `MOOMOO_LOGIN_PWD`, `MOOMOO_RSA_KEY`) are
+  the headless/CI fallback only.
+- `.env` holds NON-SECRET config only (`START_DATE`, `OPEND_DIR`).
+- `OpenD.example.xml` is committed (template, placeholders only). `OpenD.xml` is
+  GENERATED at runtime from that template + the keyring, contains the password,
+  and is gitignored.
 
 ## Power BI export contract (Power BI queries depend on it)
 
@@ -24,8 +38,9 @@
 
 ## Conventions
 
-- Credentials live outside the repo (host ~/.ssh). Never read or print them.
 - User owns git commits.
+- The dashboard never writes to the database. Refresh goes through `main.py`
+  (run_daily.bat, or the sidebar button which shells out to it).
 - Power BI report is saved as PBIP (TMDL) under powerbi/: the Report/ and
   SemanticModel/ definition folders ARE committed (that is the point of PBIP);
   machine-local files are NOT: **/.pbi/ (caches + securityBindings credential blob),

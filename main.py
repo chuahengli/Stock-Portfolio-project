@@ -104,23 +104,30 @@ def cleanup_data(acc_info: pd.DataFrame, positions: pd.DataFrame, cashflow: pd.D
 
 def update_db(snapshot_df: pd.DataFrame, positions_df: pd.DataFrame, cashflow: pd.DataFrame, historical_orders: pd.DataFrame,
               current_date: datetime):
-    ## Initialise and upload dataframes to db
+    """Write one day's data.
+
+    Order is enforced by the FK on positions.date -> portfolio_snapshots.date,
+    so the snapshot must be written before its positions. cashflow precedes
+    calc_nav_units, which reads it.
+    """
     db.init_db()
-    db.insert_dataframe(positions_df, 'positions')
-    db.insert_dataframe(historical_orders, 'historical_orders')
-    db.sync_transactions()
-    # Check if cashflow dataframe is empty
+
     if cashflow.empty:
         print("Skipping cashflow database update due to empty results.")
     else:
         db.insert_dataframe(cashflow, 'cashflow')
-    # Calculate and update nav for Time Weighted Returns(TWR)
+    db.insert_dataframe(historical_orders, 'historical_orders')
+    db.sync_transactions()
+
     nav, units = db.calc_nav_units(current_date, snapshot_df)
     snapshot_df.loc[0, 'nav'] = nav
     snapshot_df.loc[0, 'units'] = units
 
+    # Parent before child, or the FK rejects the positions rows.
     db.insert_dataframe(snapshot_df, 'portfolio_snapshots')
-    db.insert_dataframe(db.net_p_l(current_date),'net_p_l')
+    db.insert_dataframe(positions_df, 'positions')
+
+    db.insert_dataframe(db.net_p_l(current_date), 'net_p_l')
 
     
     # Index + per-symbol price history: ~57 yfinance downloads per pass. The

@@ -1,41 +1,52 @@
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
 .pytest_cache/
+.ruff_cache/
 
-# Environment Variables
+# Local config. Non-secret only (START_DATE, OPEND_DIR); credentials are in the
+# OS keyring. Ignored because it is machine-specific.
 .env
 
-# Database (Local storage)
-db/
-
-# Moomoo OpenD
-# Ignore the actual config file containing credentials
+# Generated from OpenD.example.xml + keyring at runtime. CONTAINS THE PASSWORD.
+OpenD.xml
 **/OpenD.xml
-# Ignore the entire OpenD runtime folder (large binaries, kept on host)
+
+# OpenD binary folder (~100 MB)
 moomoo_OpenD_9.6.5618_Windows/
-# But keep the example template (no credentials, safe to version)
-!OpenD.example.xml
 
-# Jupyter Notebooks
-*.ipynb
-/.ipynb_checkpoints/
+# SQLite database -- personal financial data
+db/
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
 
-# Windows Task Scheduler script (machine-specific absolute paths; a
-# placeholder template is tracked as run_daily.example.bat)
-run_daily.bat
-
-# Daily run logs (rotated archive may be .txt.gz)
+# Run logs
+logs/
 daily_log*
 
-# Power BI (generated artifacts - rebuild with source/export_powerbi.py)
+# Embeds this machine's absolute path; template is run_daily.example.bat
+run_daily.bat
+
+# Power BI -- generated CSVs, rebuild with source/export_powerbi.py
 powerbi/export/
 powerbi/*.pbix
 powerbi/symbol_meta.json
 
-# Power BI PBIP machine-local working files (caches, settings, credentials)
+# Power BI PBIP machine-local files: caches, settings, credential blob
 **/.pbi/
 powerbi/**/StaticResources/
 *.abf
-# Personal financial artifacts - never publish (report PDF contains real holdings/P&L)
+# Report PDF contains real holdings and P&L
 powerbi/PowerBI/Media/*.pdf
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+.DS_Store
+
+# Local planning notes
+.hermes/
