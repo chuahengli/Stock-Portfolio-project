@@ -92,8 +92,10 @@ def get_exchange_rate(from_currency:str,to_currency:str,current_hour_tag):
     def _valid(code: str) -> bool:
         return len(code) == 3 and code.isalpha() and code != 'NAN'
     if not (_valid(fc) and _valid(tc)):
-        print(f"Warning: invalid currency pair ({from_currency!r} -> {to_currency!r}) - using rate 1.0")
-        return 1.0
+        raise ValueError(
+            f"invalid currency pair ({from_currency!r} -> {to_currency!r}); "
+            "refusing to convert at an assumed rate of 1.0"
+        )
     ticker = f"{fc}{tc}=X" if tc != 'USD' else f"{fc}=X"
     try:
         price_data = yf.download(tickers=ticker, period='1d',
@@ -106,14 +108,16 @@ def get_exchange_rate(from_currency:str,to_currency:str,current_hour_tag):
         # Forward-fill to propagate the last valid price, then select the last row.
         # This handles cases where some tickers may not have traded in the last minute.
             return price_data['Close'].ffill().iloc[-1].round(decimals=3).item()
-        # Set fallbacks and get approx value
-        fallbacks = {"USD": {"SGD": 1.28}, "SGD": {"USD": 0.78}}
-        return fallbacks.get(fc, {}).get(tc, 1.0)
-    
+        raise RuntimeError(f"no FX data returned for {ticker}")
     except Exception as e:
-        print(f"Error fetching exchange rate: {e}")
-        # Return a safe fallback so the dashboard doesn't break
-        return 1.28 if fc == "USD" and tc == "SGD" else 0.78 if fc == "SGD" and tc == "USD" else 1.0
+        # RAISE, do not guess. The old code returned a hardcoded 1.28 / 0.78 /
+        # 1.0 here, which silently valued positions at an assumed rate and left
+        # no trace in the data. A missing rate is a data-integrity failure, not
+        # a display inconvenience: surface it so the run fails loudly instead of
+        # writing numbers that look plausible and are wrong.
+        raise RuntimeError(
+            f"could not fetch FX rate {fc}->{tc} ({ticker}): {e}"
+        ) from e
 
     
             

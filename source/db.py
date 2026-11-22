@@ -5,6 +5,7 @@ import sqlite3
 import pandas as pd
 from datetime import datetime, date
 import re
+import uuid
 import numpy as np
 from contextlib import contextmanager
 import yfinance as yf
@@ -13,12 +14,26 @@ import functools
 # Manage the open and close of database
 @contextmanager
 def db_contextmanager():
-    conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH),check_same_thread=False)
+    """Open a connection, yield it, and COMMIT ONLY ON SUCCESS.
+
+    The old shape committed inside `finally`, so an exception raised mid-write
+    still committed the partial work (e.g. positions written, snapshot missing).
+    Now an exception rolls back and re-raises: a failed run leaves no half-state.
+    """
+    conn = sqlite3.connect(str(settings.MOOMOO_PORTFOLIO_DB_PATH), check_same_thread=False)
     try:
         conn.execute("PRAGMA journal_mode=WAL;")
+        # Declared FOREIGN KEYs are decorative in SQLite unless this is ON, per
+        # connection. Without it a positions row can reference a snapshot date
+        # that does not exist.
+        conn.execute("PRAGMA foreign_keys=ON;")
         yield conn
-    finally:
+    except Exception:
+        conn.rollback()
+        raise
+    else:
         conn.commit()
+    finally:
         conn.close()
 
 
@@ -173,17 +188,27 @@ def table_empty(table_name:str):
         return count == 0
 
 def insert_dataframe(df:pd.DataFrame, table_name:str):
+    """Upsert a DataFrame into `table_name` via a staging table.
+
+    The staging table name is UNIQUE PER CALL. A fixed name ('temp_staging') is
+    shared global state: two concurrent writers (the daily batch and the
+    Streamlit fragment) would clobber each other's staging rows mid-upsert,
+    silently writing the wrong data into the target table.
+    """
+    # A uuid suffix keeps each call's staging table private. Only [0-9a-f] and
+    # underscores, so it is safe to interpolate into DDL.
+    staging = f"temp_staging_{uuid.uuid4().hex}"
     with db_contextmanager() as conn:
         # Upload DataFrame to a staging table
-        df.to_sql('temp_staging', conn, if_exists='replace', index=False)
+        df.to_sql(staging, conn, if_exists='replace', index=False)
         # Define columns in df to place in columns in sql db table
         cols = ",".join(df.columns)
         # Transfer data to the main table using INSERT OR REPLACE for an "upsert" operation
         conn.execute(f"""
             INSERT OR REPLACE INTO {table_name} ({cols})
-            SELECT {cols} FROM temp_staging
+            SELECT {cols} FROM {staging}
         """)
-        conn.execute("DROP TABLE temp_staging")
+        conn.execute(f"DROP TABLE {staging}")
 
 def read_db(query:str):
     with db_contextmanager() as conn:

@@ -7,82 +7,118 @@ A tool that interfaces with the **Moomoo OpenD gateway** to store portfolio data
 - **Real-time Monitoring:** Dashboard auto-refreshes every 10 seconds
 - **Historical Performance:** Tracks daily snapshots of portfolio in database
 - **Visualisation:** Plotly-based interactive dashboard for portfolio metrics and allocation
-- **Secure Credential Isolation:** Credentials live outside the project tree — safe for AI-assisted development environments
+- **OS-keyring credentials:** login, password and RSA key path are stored in Windows Credential Manager / macOS Keychain / Secret Service — never in the repo. `python -m config.credentials setup` to configure, `status` to inspect, `clear` to remove
 - **Time-Weighted Return from inception:** TWR anchors to the earliest recorded snapshot (your tracking start date), not a hardcoded value
 - **Dividend & Coupon attribution:** cash flows are classified as *external capital* (deposits/withdrawals → adjust NAV units) vs *investment income* (dividends/coupons/taxes → count toward return), so income is no longer mislabelled as capital or silently dropped. Cumulative income is charted on the dashboard
 - **Unit tests:** `tests/` covers cash-flow classification and TWR inception logic (`python -m pytest tests/ -q`)
 - **Date-stamped realized P/L:** the `net_p_l` table now carries a `date`, so realized P/L snapshots are preserved day-to-day instead of being overwritten; the dashboard shows the latest date
 - **Buy/Sell audit ledger:** a `transactions` table (built from `historical_orders` each run) records every fill with multiplier-aware, sign-conventioned `Gross_Amount`; surfaced in a "Trade Ledger" dashboard tab
-- **Bounded daily log:** `main.py` now logs concise summaries instead of full dataframes, and `run_daily.bat` auto-rotates `daily_log.txt` (keeps one previous archive) when it exceeds 10 MB
+- **Bounded daily log:** `main.py` logs concise summaries instead of full dataframes, and `run_daily.bat` auto-rotates `logs/daily_log.txt` (keeps one previous archive) when it exceeds 10 MB
 
 ## 🛠️ Prerequisites
 
-Before running this project, you need the following:
-
 1. **Python 3.10+**
-2. **Moomoo Account** with OpenD API access
-3. **RSA Key Pair** — generated via [Moomoo's Protocol Encryption Process](https://openapi.moomoo.com/moomoo-api-doc/en/qa/other.html#1479)
+2. **Moomoo account** with OpenAPI access enabled
+3. **RSA key pair** — generated via [Moomoo's Protocol Encryption Process](https://openapi.moomoo.com/moomoo-api-doc/en/qa/other.html#1479)
 
 ## 🚀 Installation & Setup
 
-### 1. Clone the Repository
+### 1. Clone and install
 
 ```bash
 git clone https://github.com/chuahengli/Stock-Portfolio-project.git
-```
-
-### 2. Set Up the Moomoo OpenD Gateway
-
-The moomoo OpenD gateway (`OpenD.exe`) is a Windows binary that logs into your moomoo account and exposes a local API. The OpenD folder is **not** stored in the project directory — it lives in a secure location on your host machine to keep credentials isolated.
-
-1. Move the `moomoo_OpenD_9.6.5618_Windows` folder to:
-   ```
-   C:\Users\<you>\.ssh\moomoo_OpenD_9.6.5618_Windows\
-   ```
-2. The `OpenD.example.xml` template at the project root is used by `config/credentials.py` to generate the real `OpenD.xml` at runtime
-3. The XML will be populated with your credentials from the `.env` file at runtime
-
-### 3. RSA Key Generation
-
-1. Generate a private/public key pair by following [Moomoo's Protocol Encryption Process](https://openapi.moomoo.com/moomoo-api-doc/en/qa/other.html#1479)
-2. Save the private key to a text file (e.g. `C:\Users\<you>\.ssh\moomoo_api_private_key.txt`)
-3. Reference this file path in your `.env` (see below)
-
-### 4. Configure `.env`
-
-1. Rename `.env.example` → `.env`
-2. Fill in your credentials:
-
-```bash
-# Path to your RSA private key file
-MOOMOO_RSA_KEY=C:\Users\YourName\.ssh\moomoo_api_private_key.txt
-
-# Your moomoo login account (user ID, phone number, or email)
-MOOMOO_LOGIN_ACCOUNT=YOUR_LOGIN_ACCOUNT_HERE
-
-# Your moomoo login password (plain text — used to generate OpenD.xml at runtime)
-MOOMOO_LOGIN_PWD=your_password
-
-# Path to the moomoo_OpenD folder
-OPEND_DIR=C:\Users\YourName\.ssh\moomoo_OpenD_9.6.5618_Windows
-
-# Date you opened your Moomoo account (YYYY-MM-DD)
-START_DATE="YYYY-MM-DD"
-```
-
-> **Why this structure?**
-> - The `.env` file is in `.gitignore` and never committed
-> - The OpenD folder (with `OpenD.xml`) lives outside the project tree
-> - At runtime, `config/credentials.py` reads the `.env`, generates the real `OpenD.xml` from the template, then starts OpenD — so credentials never sit in the project directory
-
-### 5. Install Dependencies
-
-This project uses `pipenv` for dependency management:
-
-```bash
+cd Stock-Portfolio-project
 pip install pipenv
 pipenv install
 ```
+
+### 2. Store your credentials in the OS keyring
+
+Credentials are **never written into this repository**. They go into your operating
+system's encrypted credential store — Windows Credential Manager, macOS Keychain, or
+Linux Secret Service.
+
+```bash
+pipenv run python -m config.credentials setup
+```
+
+You will be prompted for three values (the password is typed hidden and never echoed):
+
+| Prompt | Value |
+| --- | --- |
+| moomoo login | your account ID, email, or phone number |
+| moomoo login password | your password (stored encrypted) |
+| path to your RSA private key file | e.g. `C:\Users\YourName\.ssh\moomoo_api_private_key.txt` |
+
+Check what is stored — this prints *where* each value came from, never the value:
+
+```bash
+pipenv run python -m config.credentials status
+```
+
+Remove them again with `pipenv run python -m config.credentials clear`.
+
+> **Why not a `.env` password?** A plaintext password in a file gets screenshotted,
+> synced to cloud backups, and pasted into bug reports. The keyring is encrypted at
+> rest and unlocked by your OS login. `.env` is used only for non-secret settings.
+
+<details>
+<summary><b>Headless / Docker / CI (no OS keyring)</b></summary>
+
+On a server, container, or CI runner there is no Secret Service daemon, so the
+keyring is unavailable. Set environment variables instead — `get_secret()` falls back
+to them automatically:
+
+```bash
+cp .env.example .env
+# then set MOOMOO_LOGIN_ACCOUNT / MOOMOO_LOGIN_PWD / MOOMOO_RSA_KEY
+```
+</details>
+
+### 3. Point the project at OpenD
+
+Install the moomoo **OpenD** gateway (a Windows binary that holds the broker session
+and exposes a local API on `127.0.0.1:11111`). Keep it outside the checkout:
+
+```
+C:\Users\<you>\.ssh\moomoo_OpenD_9.6.5618_Windows\
+```
+
+Then add the two non-secret settings to `.env`:
+
+```bash
+cp .env.example .env
+```
+
+```bash
+# Folder containing OpenD.exe (a path, not a secret)
+OPEND_DIR=C:\Users\YourName\.ssh\moomoo_OpenD_9.6.5618_Windows
+
+# Date tracking began (YYYY-MM-DD) -- the history backfill floor
+START_DATE="YYYY-MM-DD"
+```
+
+You do **not** create `OpenD.xml` yourself. `OpenD.example.xml` (committed, no secrets)
+is the 87-line config template; at runtime `config/credentials.py` substitutes your
+three keyring values into it and writes `OpenD.xml` next to `OpenD.exe`. That generated
+file **does** contain the password, which is why it is gitignored and kept outside the
+repo.
+
+### 4. First run
+
+```bash
+pipenv run python main.py      # fetch history -> clean -> store in SQLite
+pipenv run streamlit run streamlit_app.py
+```
+
+The dashboard is **read-only**: it renders whatever `main.py` last wrote. Use the
+sidebar **Refresh from broker** button (or `run_daily.bat`) to pull new data — it runs
+`main.py` as a separate process so there is exactly one writer.
+
+#### Automated daily run
+
+Copy `run_daily.example.bat` to `run_daily.bat`, replace `<PROJECT_DIR>` with your
+checkout path, and register it in Windows Task Scheduler.
 
 ## 📂 Project Structure
 
@@ -90,8 +126,8 @@ pipenv install
 .
 ├── config/
 │   ├── __init__.py           # (empty)
-│   ├── settings.py           # Paths, configuration constants, env loading
-│   └── credentials.py        # Loads secure credentials, generates OpenD.xml
+│   ├── settings.py           # Paths + non-secret settings (no credentials)
+│   └── credentials.py        # OS-keyring secret storage + OpenD.xml generation
 ├── source/
 │   ├── cleanup.py            # Data transformation and cleaning logic
 │   ├── db.py                 # SQLite database interactions
@@ -99,17 +135,17 @@ pipenv install
 │   ├── dashboard.py          # Plotly/pandas visualization logic
 │   └── export_powerbi.py     # Exports the DB into the star-schema CSVs
 ├── tests/                    # Unit tests (pytest) — pure logic, no DB/network
-├── db/                       # SQLite database storage (gitignored)
+├── db/                       # SQLite database (gitignored — personal data)
+├── logs/                     # Daily run logs, auto-rotated (gitignored)
 ├── main.py                   # Entry point — fetch API data → clean → store to DB
-├── streamlit_app.py          # Interactive Streamlit Web UI
-├── run_daily.bat             # Daily batch (gitignored — machine-specific paths)
-├── run_daily.example.bat     # Placeholder template for the daily batch
-├── OpenD.example.xml         # Template to generate credentials-bearing OpenD.xml
+├── streamlit_app.py          # Streamlit UI (READ-ONLY — never writes to the DB)
+├── run_daily.example.bat     # Template for the scheduled daily batch
+├── OpenD.example.xml         # Config template (no secrets) → generates OpenD.xml
 ├── Pipfile                   # Dependency definitions (pipenv)
-├── .env.example              # Template for credential configuration
+├── .env.example              # Template for non-secret local settings
 ├── AGENTS.md                 # Repo conventions for AI agents
 ├── LICENSE
-├── .gitignore                # Prevents leakage of secrets, DB, runtime binaries
+├── .gitignore                # Keeps secrets, DB, logs and binaries out of git
 ├── powerbi/
 │   ├── export/               # 8 star-schema CSVs generated from the DB (Power BI source)
 │   ├── POWERBI_ROADMAP.md    # Power BI learning track — course contract + archive

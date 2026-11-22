@@ -104,23 +104,47 @@ def cleanup_data(acc_info: pd.DataFrame, positions: pd.DataFrame, cashflow: pd.D
 
 def update_db(snapshot_df: pd.DataFrame, positions_df: pd.DataFrame, cashflow: pd.DataFrame, historical_orders: pd.DataFrame,
               current_date: datetime):
+    """Write one day's data in dependency order.
+
+    Order matters and is now enforced by the database (PRAGMA foreign_keys=ON):
+    `positions.date` references `portfolio_snapshots.date`, so the snapshot MUST
+    be written before the positions that point at it. The previous order wrote
+    positions first, which only worked because FKs were silently disabled --
+    a positions row could reference a snapshot date that never got written.
+
+    Sequence, and why:
+      1. cashflow          -- no FK; must precede calc_nav_units (reads flows)
+      2. historical_orders -- no FK; precedes sync_transactions (reads orders)
+      3. sync_transactions -- derived from (2)
+      4. calc_nav_units    -- reads prior snapshot + cashflow; must precede (5)
+      5. portfolio_snapshots -- FK PARENT; must precede (6)
+      6. positions         -- FK CHILD (references snapshot date)
+      7. net_p_l           -- derived; reads historical_orders + positions
+    """
     ## Initialise and upload dataframes to db
     db.init_db()
-    db.insert_dataframe(positions_df, 'positions')
-    db.insert_dataframe(historical_orders, 'historical_orders')
-    db.sync_transactions()
-    # Check if cashflow dataframe is empty
+
+    # 1-2: raw observed data with no inter-table dependencies.
     if cashflow.empty:
         print("Skipping cashflow database update due to empty results.")
     else:
         db.insert_dataframe(cashflow, 'cashflow')
-    # Calculate and update nav for Time Weighted Returns(TWR)
+    db.insert_dataframe(historical_orders, 'historical_orders')
+
+    # 3: derived ledger, rebuilt from historical_orders.
+    db.sync_transactions()
+
+    # 4: NAV/units needs the prior snapshot AND this window's cashflow already in place.
     nav, units = db.calc_nav_units(current_date, snapshot_df)
     snapshot_df.loc[0, 'nav'] = nav
     snapshot_df.loc[0, 'units'] = units
 
+    # 5-6: parent before child, or the FK rejects the positions rows.
     db.insert_dataframe(snapshot_df, 'portfolio_snapshots')
-    db.insert_dataframe(db.net_p_l(current_date),'net_p_l')
+    db.insert_dataframe(positions_df, 'positions')
+
+    # 7: derived, reads both tables written above.
+    db.insert_dataframe(db.net_p_l(current_date), 'net_p_l')
 
     
     # Index + per-symbol price history: ~57 yfinance downloads per pass. The

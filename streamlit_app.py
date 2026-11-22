@@ -2,20 +2,56 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 from datetime import datetime, date, timedelta
-import atexit
+import subprocess
+import sys
+from pathlib import Path
 import plotly.express as px
 
-# Import existing project modules
-from source import dashboard, db, moomoo_api
+# Import existing project modules. NOTE: `moomoo_api` and `main` are deliberately
+# NOT imported -- see the read-only contract below.
+from source import dashboard, db
 from config import settings
-import main  # To access upload_to_db logic
 
-atexit.register(moomoo_api.stop_opend)
+# ---------------------------------------------------------------------------
+# ARCHITECTURE: the dashboard is a READ-ONLY renderer.
+#
+# This app used to call main.upload_to_db() from a 10-second st.fragment, i.e.
+# it wrote positions / historical_orders / transactions / net_p_l / snapshots
+# from the render thread, concurrently with run_daily.bat. Two writers on one
+# SQLite file, sharing a fixed staging table name, is how data gets silently
+# clobbered mid-write.
+#
+# Now: `run_daily.bat` (or the Refresh button, which invokes it as a
+# subprocess) is the SINGLE writer. The app only reads. Toggling Live Mode just
+# re-runs the queries every 10 s, so the view picks up whatever the batch last
+# committed. This also removes every moomoo/OpenD dependency from the UI.
+# ---------------------------------------------------------------------------
 
-@st.cache_resource
-def persistent_opend():
-    """Return True if OpenD is ready, False otherwise. Cache so that it's only checked once."""
-    return moomoo_api.ensure_opend_is_ready()
+PROJECT_ROOT = Path(__file__).resolve().parent
+
+
+def run_batch_subprocess() -> tuple[bool, str]:
+    """Invoke the daily batch as a SEPARATE process (single writer).
+
+    Runs `python main.py` rather than importing main, so the app never holds a
+    moomoo/OpenD session and can never interleave writes with a scheduled run.
+    """
+    try:
+        proc = subprocess.run(
+            [sys.executable, "main.py"],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=900,
+        )
+        ok = proc.returncode == 0
+        tail = (proc.stdout or "")[-2000:] + (proc.stderr or "")[-2000:]
+        return ok, tail
+    except subprocess.TimeoutExpired:
+        return False, "Batch timed out after 900s."
+    except Exception as e:  # pragma: no cover - environment dependent
+        return False, f"Failed to launch batch: {e}"
+
 
 
 
@@ -32,10 +68,26 @@ st.set_page_config(
 # --- Main Dashboard ---
 st.title("📈 Moomoo Portfolio Dashboard", text_alignment = 'center')
 # --- Live Mode Toggle ---
-live_mode = st.toggle("🔴 Live Mode", value=True, help="Auto-refresh data every 10 seconds.")
+live_mode = st.toggle("🔴 Live Mode", value=True, help="Re-read the database every 10 seconds so the view follows the latest batch run. The dashboard is read-only; it never writes.")
 refresh_rate = 10
 if live_mode:
-        st.caption(f"Auto-refreshing every {refresh_rate}s...")
+        st.caption(f"Re-reading every {refresh_rate}s...")
+
+# --- Manual refresh: the ONE way the UI can cause a write ---
+with st.sidebar:
+    st.subheader("Data")
+    latest_meta = db.get_meta("last_symbol_prices_update", "never")
+    st.caption(f"Last price update: {latest_meta}")
+    if st.button("Refresh from broker", help="Runs main.py as a separate process, then reloads. Takes ~60s."):
+        with st.spinner("Running the daily batch..."):
+            ok, detail = run_batch_subprocess()
+        if ok:
+            st.success("Batch completed. Reloading...")
+            st.rerun()
+        else:
+            st.error("Batch failed. See logs/daily_log.txt")
+            with st.expander("Output"):
+                st.code(detail or "(no output)")
 
     
 
@@ -73,20 +125,12 @@ def combined_data(table_name: str):
 
 
 @st.fragment(run_every=refresh_rate if live_mode else None)
-def live_update_db():
-    try:
-        today_date = datetime.combine(date.today(), datetime.min.time())
-        main.upload_to_db(today_date, today_date, keep_opend_alive=True)
-    except Exception as e:
-        print(f"Error updating database: {e}")
-
-@st.fragment(run_every=refresh_rate if live_mode else None)
 def render_live():
     current_time = datetime.now().strftime('%b %d, %Y %H:%M:%S')
     latest_date = db.get_latest_db_date(datetime.combine(date.today(), datetime.min.time()))
     
     if not latest_date:
-        st.info("No data found in database. Please click 'Update Data from API' in the sidebar.")
+        st.info("No data found in database. Run `python main.py`, or use 'Refresh from broker' in the sidebar.")
         return
     
     previous_date = latest_date - timedelta(days=1)
@@ -318,6 +362,4 @@ def render_live():
                 if not summary.empty:
                     st.dataframe(summary, width='stretch')
 
-render_live()  
-persistent_opend()
-live_update_db()
+render_live()

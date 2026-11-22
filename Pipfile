@@ -13,6 +13,7 @@ psutil = "*"
 plotly = "*"
 streamlit = "*"
 numpy = "*"
+keyring = "*"
 
 [dev-packages]
 pytest = "*"

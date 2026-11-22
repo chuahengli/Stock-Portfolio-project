@@ -62,13 +62,29 @@ def ensure_opend_is_ready():
 
 
 def configure_moomoo_api():
-    # Get the RSA key path from environment variables (set by secure .env)
-    key_path = os.getenv("MOOMOO_RSA_KEY")
+    """Create the trade context, using the keyring-backed RSA key path.
+
+    Resolve via config.credentials so there is ONE source of truth. The old code
+    read os.getenv("MOOMOO_RSA_KEY") directly and fell back to a legacy KEY_PATH
+    var, which on this machine held a double-escaped path
+    ('C:\\\\Users\\\\...') that no filesystem call could open. Because OpenD itself
+    reads <rsa_private_key> from the generated OpenD.xml, the mangled value went
+    unnoticed -- the gateway still started.
+
+    A missing key means the SDK's protocol encryption cannot be set up: raise
+    rather than pass None into set_init_rsa_file, which fails obscurely later.
+    """
+    from config.credentials import get_secret
+
+    key_path = get_secret("rsa_key_path")
     if not key_path:
-        # Fallback: try the old KEY_PATH variable for backward compat
-        key_path = os.getenv("KEY_PATH")
-    if not key_path:
-        print("Warning: MOOMOO_RSA_KEY not set — API encryption may fail.")
+        raise RuntimeError(
+            "No RSA private key path configured. Run:\n"
+            "    python -m config.credentials setup"
+        )
+    # Normalise: a .env value may arrive with literal backslash escaping.
+    key_path = key_path.replace("\\\\", "\\")
+
     # 1. Configure the RSA private key file globally
     moomoo.SysConfig.set_init_rsa_file(key_path)
     # 2. Create the trade context and enable encryption
