@@ -7,35 +7,19 @@ import sys
 from pathlib import Path
 import plotly.express as px
 
-# Import existing project modules. NOTE: `moomoo_api` and `main` are deliberately
-# NOT imported -- see the read-only contract below.
+# moomoo_api and main are deliberately NOT imported: this app never writes.
 from source import dashboard, db
 from config import settings
 
-# ---------------------------------------------------------------------------
-# ARCHITECTURE: the dashboard is a READ-ONLY renderer.
-#
-# This app used to call main.upload_to_db() from a 10-second st.fragment, i.e.
-# it wrote positions / historical_orders / transactions / net_p_l / snapshots
-# from the render thread, concurrently with run_daily.bat. Two writers on one
-# SQLite file, sharing a fixed staging table name, is how data gets silently
-# clobbered mid-write.
-#
-# Now: `run_daily.bat` (or the Refresh button, which invokes it as a
-# subprocess) is the SINGLE writer. The app only reads. Toggling Live Mode just
-# re-runs the queries every 10 s, so the view picks up whatever the batch last
-# committed. This also removes every moomoo/OpenD dependency from the UI.
-# ---------------------------------------------------------------------------
+# The dashboard is read-only. main.py (run by run_daily.bat, or via the sidebar
+# Refresh button as a subprocess) is the single writer. Live Mode only re-reads
+# the database every 10s; it never causes a write.
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 
 def run_batch_subprocess() -> tuple[bool, str]:
-    """Invoke the daily batch as a SEPARATE process (single writer).
-
-    Runs `python main.py` rather than importing main, so the app never holds a
-    moomoo/OpenD session and can never interleave writes with a scheduled run.
-    """
+    """Run main.py as a separate process so the UI never holds a broker session."""
     try:
         proc = subprocess.run(
             [sys.executable, "main.py"],

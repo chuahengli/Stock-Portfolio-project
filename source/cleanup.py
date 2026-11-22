@@ -110,11 +110,8 @@ def get_exchange_rate(from_currency:str,to_currency:str,current_hour_tag):
             return price_data['Close'].ffill().iloc[-1].round(decimals=3).item()
         raise RuntimeError(f"no FX data returned for {ticker}")
     except Exception as e:
-        # RAISE, do not guess. The old code returned a hardcoded 1.28 / 0.78 /
-        # 1.0 here, which silently valued positions at an assumed rate and left
-        # no trace in the data. A missing rate is a data-integrity failure, not
-        # a display inconvenience: surface it so the run fails loudly instead of
-        # writing numbers that look plausible and are wrong.
+        # Raise rather than guess a rate: a fallback would value positions at an
+        # assumed number with no trace in the data.
         raise RuntimeError(
             f"could not fetch FX rate {fc}->{tc} ({ticker}): {e}"
         ) from e

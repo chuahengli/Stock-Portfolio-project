@@ -1,31 +1,12 @@
-"""Tool-grade credential handling.
+"""Credential storage in the OS keyring.
 
-Design goals
-------------
-1. **No plaintext password on disk.** Secrets live in the OS keyring
-   (Windows Credential Manager / macOS Keychain / Secret Service). The previous
-   design wrote the moomoo login password into a ``.env`` file in plaintext and
-   generated an ``OpenD.xml`` containing it.
-2. **No guessed paths.** The old default secret path was hardcoded as
-   ``C:/Users/<you>/.ssh/moomoo_creds.env`` -- a literal ``<you>`` that never
-   resolves on any machine, so every user had to discover they must override it.
-3. **One obvious setup command.** ``python -m config.credentials setup`` prompts
-   for each value, stores it, and verifies it.
-4. **Non-secret config stays in files.** ``START_DATE`` and paths are not
-   secrets; they stay in ``.env`` where they are reviewable in a diff.
+Secrets resolve in this order: keyring -> environment variable -> None.
+The env-var fallback exists for headless/CI runs, where no keyring backend is
+available.
 
-Resolution order for every secret
----------------------------------
-keyring  ->  environment variable  ->  None
-
-The env-var fallback keeps headless / CI runs working without a keyring, but it
-is never the documented path for a human user.
-
-Usage
------
-    python -m config.credentials setup      # interactive first-time setup
-    python -m config.credentials status     # show what is stored (never values)
-    python -m config.credentials clear      # remove stored secrets
+    python -m config.credentials setup      # first-time setup
+    python -m config.credentials status     # what is stored (never values)
+    python -m config.credentials clear      # remove all secrets
 """
 from __future__ import annotations
 
@@ -54,10 +35,10 @@ FIELDS: dict[str, tuple[str, str, bool]] = {
 
 
 def _keyring_usable() -> bool:
-    """True only if the keyring backend can actually store and return values.
+    """True if the keyring backend can actually store and return a value.
 
-    A headless Linux box may expose a backend that raises on write. Probe once
-    with a throwaway entry rather than discovering it mid-setup.
+    A headless Linux backend may raise on write; probe once with a throwaway
+    entry instead of failing mid-setup.
     """
     if not _KEYRING_AVAILABLE:
         return False
@@ -111,11 +92,7 @@ def delete_secret(field: str) -> bool:
 
 
 def load_opend_credentials() -> dict | None:
-    """Return the three moomoo credentials, or None if any is missing.
-
-    Single accessor for the rest of the codebase, so nothing else needs to know
-    whether a value came from the keyring or the environment.
-    """
+    """Return the three moomoo credentials, or None if any is missing."""
     account = get_secret("login_account")
     pwd = get_secret("login_pwd")
     rsa_key = get_secret("rsa_key_path")

@@ -1,71 +1,52 @@
-# ============================================================================
 # Python
-# ============================================================================
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
 
-# ============================================================================
-# Secrets and local configuration
-# ============================================================================
-# .env holds NON-SECRET config only (START_DATE, OPEND_DIR). Credentials live
-# in the OS keyring. Still not committed: it is machine-specific.
+# Local config. Non-secret only (START_DATE, OPEND_DIR); credentials are in the
+# OS keyring. Ignored because it is machine-specific.
 .env
 
-# Generated at runtime from OpenD.example.xml + keyring. CONTAINS THE PASSWORD.
+# Generated from OpenD.example.xml + keyring at runtime. CONTAINS THE PASSWORD.
 OpenD.xml
 **/OpenD.xml
 
-# The OpenD binary folder (~100 MB). If installed inside the project, ignore it
-# wholesale -- this rule also covers any OpenD.xml generated inside it.
+# OpenD binary folder (~100 MB)
 moomoo_OpenD_9.6.5618_Windows/
 
-# ============================================================================
-# Local data
-# ============================================================================
-# SQLite database (personal financial data)
+# SQLite database -- personal financial data
 db/
 *.db
 *.db-shm
 *.db-wal
 *.db-journal
 
-# Daily run logs
+# Run logs
 logs/
 daily_log*
 
-# ============================================================================
-# Machine-local scripts
-# ============================================================================
-# run_daily.bat embeds this machine's absolute path; run_daily.example.bat is
-# the tracked template.
+# Embeds this machine's absolute path; template is run_daily.example.bat
 run_daily.bat
 
-# ============================================================================
-# Power BI
-# ============================================================================
-# Generated star-schema CSVs -- rebuild with source/export_powerbi.py
+# Power BI -- generated CSVs, rebuild with source/export_powerbi.py
 powerbi/export/
 powerbi/*.pbix
-# yfinance enrichment cache (regenerable)
 powerbi/symbol_meta.json
 
-# PBIP machine-local working files: caches, settings, credential blob
+# Power BI PBIP machine-local files: caches, settings, credential blob
 **/.pbi/
 powerbi/**/StaticResources/
 *.abf
-# Report PDF contains real holdings and P&L -- never publish
+# Report PDF contains real holdings and P&L
 powerbi/PowerBI/Media/*.pdf
 
-# ============================================================================
-# Editor / OS / scratch
-# ============================================================================
+# Editor / OS
 .vscode/
 .idea/
 *.swp
 Thumbs.db
 .DS_Store
 
-# Local planning and scratch notes
+# Local planning notes
 .hermes/
