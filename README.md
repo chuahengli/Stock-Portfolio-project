@@ -97,7 +97,7 @@ START_DATE="2024-01-01"
 OPEND_DIR=C:\Users\YourName\.ssh\moomoo_OpenD_Windows
 ```
 
-> At runtime, `config/credentials.py` combines `OpenD.example.xml` with your keyring credentials to generate `OpenD.xml` inside `OPEND_DIR`. On a new machine, launch `OpenD.exe` once manually to accept any initial agreement or SMS device verification (`input_phone_verify_code -code=123456`), then close it — `main.py` manages OpenD automatically after that.
+> On a new machine, launch `OpenD.exe` once manually to accept the initial agreement or SMS device verification, then close it. `main.py` generates `OpenD.xml` from your keyring credentials and manages OpenD after that.
 
 ### 5. First run (backfill database)
 
@@ -120,7 +120,13 @@ Database updated successfully.
 pipenv run streamlit run streamlit_app.py
 ```
 
-**Live Mode** (top toggle, on by default) re-reads SQLite every 10 seconds.
+**Live Mode** (top toggle, on by default) refreshes the display every 10 seconds
+from the database. The nightly batch (`main.py`) is the only writer of record.
+Toggle it off to stop polling. The dark theme is set in `.streamlit/config.toml`.
+
+**Stopping the app:** press Ctrl+C. Streamlit closes, and the OpenD gateway this
+app launched is shut down with it. A gateway you started manually is left running.
+If one is ever orphaned, kill it with `taskkill /IM OpenD.exe /F`.
 
 **Optional — Power BI report:**
 1. Export the 8 star-schema CSVs: `pipenv run python -m source.export_powerbi`
@@ -130,8 +136,8 @@ pipenv run streamlit run streamlit_app.py
 
 ## Running after that
 
-Subsequent runs only fetch the last 30 days (extended automatically if the machine was
-off longer). Use either mode independently:
+Later runs fetch the last 30 days (extended if the machine was off longer).
+Use either mode independently; neither requires the other to be running:
 
 - **Option A — From the dashboard:** Click **Refresh from broker** in the Streamlit
   sidebar. It runs `main.py` as a subprocess and reloads the page.
@@ -152,6 +158,7 @@ off longer). Use either mode independently:
 │   ├── cleanup.py            # API DataFrame cleaning and cash-flow classification
 │   ├── db.py                 # SQLite schema, upserts, NAV/unit TWR, price history
 │   ├── dashboard.py          # Plotly figures and table formatting
+│   ├── live.py               # 10s moomoo quote poller (live_* tables only)
 │   └── export_powerbi.py     # SQLite → 8 star-schema CSVs for Power BI
 ├── tests/                    # Pure-logic unit tests (pytest)
 ├── powerbi/
@@ -193,9 +200,9 @@ every run.
 pipenv run python -m pytest tests/ -q
 ```
 
-29 pure-logic tests (~2 seconds, no database, network, or broker account required)
-covering cash-flow classification, TWR unitisation, partial-fill order handling, option
-multipliers, and trade-ledger sign conventions.
+49 pure-logic tests (~20 seconds, no database, network, or broker account required):
+cash-flow classification, TWR unitisation, order handling, option multipliers,
+trade-ledger sign conventions, and shutdown cleanup.
 
 ## Known limitations
 

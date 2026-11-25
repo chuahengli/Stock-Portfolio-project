@@ -1,3 +1,8 @@
+"""Transform raw moomoo API frames into the database schema.
+
+Also holds the pure classification logic (cash-flow type -> external capital /
+investment income, option-symbol detection), which is what the unit tests cover.
+"""
 from datetime import datetime
 from typing import Optional, Dict, List
 import pandas as pd
@@ -67,15 +72,14 @@ def cleanup_positions(positions:pd.DataFrame):
                             'pl_val':'P_L',
                             'today_pl_val':"Today_s_P_L",
                             'currency':'Currency'}, inplace=True)
-    # Drop rows with a zero / NaN market value or missing currency. NaN fails
-    # the '!= 0' test (NaN != 0 is True), so a placeholder API row with a NaN
-    # currency used to slip through into the FX path (the recurring NANSGD=X
-    # Yahoo 404) and would be summed at face value.
+    # Drop rows with a zero/NaN market value or a missing currency. NaN != 0 is
+    # True, so an explicit notna() is required or the row survives the filter and
+    # reaches the FX path as a nonsensical pair.
     positions = positions[
         positions['Market_Value'].notna() & (positions['Market_Value'] != 0)
         & positions['Currency'].notna()
     ]
-    # Renamed Symbol to exclude XX.AMZN...f
+    # Strip the market prefix and suffix (US.AMZN -> AMZN); OCC option codes pass through unchanged.
     positions['Symbol'] = positions['Symbol'].apply(extract_ticker)
     return positions
 
@@ -104,9 +108,8 @@ def get_exchange_rate(from_currency:str,to_currency:str,current_hour_tag):
                                 progress=False,
                                 prepost=True)
         if not price_data.empty:
-            # Extract the most recent price for each ticker
-        # Forward-fill to propagate the last valid price, then select the last row.
-        # This handles cases where some tickers may not have traded in the last minute.
+            # Forward-fill to propagate the last valid price, then select the last row.
+            # This handles cases where some tickers may not have traded in the last minute.
             return price_data['Close'].ffill().iloc[-1].round(decimals=3).item()
         raise RuntimeError(f"no FX data returned for {ticker}")
     except Exception as e:
@@ -135,10 +138,7 @@ def update_portfolio_percentage(pos: pd.DataFrame, total_assets: float) -> None:
     if total_assets == 0:
         pos['Portfolio_Percent'] = 0.0
     else:
-        # Convert each row with its OWN currency (total_assets is SGD).
-        # Was hardcoded "USD"->"SGD", which multiplied SGD-denominated rows
-        # (SGX names like 5E2/OU8) by the USD/SGD rate and inflated their
-        # portfolio % by ~28%.
+        # Convert each row from its own currency (USD or SGD) to the SGD base.
         mv_sgd = pos.apply(
             lambda row: convert_currency(row['Market_Value'], row['Currency'], 'SGD'), axis=1
         )
@@ -150,15 +150,19 @@ def update_portfolio_percentage(pos: pd.DataFrame, total_assets: float) -> None:
 def cleanup_historical_orders(historical_orders:pd.DataFrame):
     if historical_orders is None or historical_orders.empty:
         return pd.DataFrame(columns=['Symbol', 'Name', 'Market', 'Buy_Sell', 'Quantity', 'Order_ID', 'Current_Price', 'Currency', 'date_time'])
-    # A partial fill's ledger Quantity must be the FILLED portion, not the
-    # ordered size (moomoo reports the fill-so-far in 'filled_qty'; for
-    # FILLED_ALL both carry the same value). Swapped before the column
-    # selection, which drops 'filled_qty'. Falls back to 'qty' when the
-    # column is absent (older SDK payloads) -- for FILLED_ALL rows that is
-    # still exact.
-    if 'filled_qty' in historical_orders.columns:
+    # Record the FILLED quantity and price, not the ordered ones. The SDK returns
+    # dealt_qty / dealt_avg_price alongside qty (order size) and price (limit
+    # price set); for a partial fill the latter two describe an order that never
+    # fully happened. Fall back to qty/price when dealt_* is absent.
+    if 'dealt_qty' in historical_orders.columns:
         historical_orders = historical_orders.copy()
-        historical_orders['qty'] = historical_orders['filled_qty'].fillna(historical_orders['qty'])
+        historical_orders['qty'] = historical_orders['dealt_qty'].fillna(historical_orders['qty'])
+        # dealt_avg_price is 0 (not NaN) for market orders reported before the
+        # fill settled. Only take it when it is a real positive price, otherwise
+        # keep the order's own price rather than overwrite it with 0.
+        filled_price = historical_orders['dealt_avg_price']
+        use_it = filled_price.notna() & (filled_price > 0)
+        historical_orders.loc[use_it, 'price'] = filled_price[use_it]
     # Every status that carries an actual fill: fully filled, still-open
     # partials, and orders cancelled after a partial fill. Pure CANCELLED /
     # UNFILLED / FAILED rows never reached the market and stay out.
@@ -275,10 +279,9 @@ def separate_assets(positions:pd.DataFrame):
 
 def sum_of_mv(df:pd.DataFrame):
     if df.empty:
-        # Empty frames (e.g. no options held): pandas apply(axis=1) on an empty
-        # frame calls the function once with a dummy all-NaN row for dtype
-        # inference -- that dummy call used to reach the FX path and fire the
-        # recurring NANSGD=X Yahoo 404 in every run. Skip it entirely.
+        # pandas calls apply(axis=1) once with a dummy all-NaN row on an empty
+        # frame, to infer the result dtype. That row would hit the FX path with
+        # NaN currencies, so return early rather than invoke the conversion.
         return 0.0
     converted_df = df.loc[:, ['Market_Value', 'Currency']].copy()
     converted_df['Market_Value'] = converted_df.apply(

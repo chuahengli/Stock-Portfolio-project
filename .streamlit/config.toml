@@ -1,0 +1,12 @@
+# Matte Circuit — dark, quiet, structured. Accent is interactive-only.
+# No all-caps text; silver on charcoal with circuit-gold highlights.
+[theme]
+base = "dark"
+primaryColor = "#D4AF37"
+backgroundColor = "#121214"
+secondaryBackgroundColor = "#1B1B1F"
+textColor = "#E8E8E8"
+baseRadius = "small"
+font = "sans-serif"
+showWidgetBorder = true
+showSidebarBorder = true

@@ -1,4 +1,4 @@
-"""Tests for the buy/sell audit ledger (#4) and date-stamped net P/L (#3).
+"""Tests for the buy/sell audit ledger and the date-stamped net P/L aggregation.
 
 Pure-logic tests only (no database, no network).
 Run from the project root:  python -m pytest tests/ -q
@@ -16,37 +16,63 @@ from source.cleanup import cleanup_historical_orders
 import pandas as pd
 
 
-def _raw_orders(with_filled_qty: bool):
+def _raw_orders(with_dealt_cols: bool):
+    """A SDK-shaped order payload.
+
+    Column names mirror the real `history_order_list_query` response:
+    qty/price are the ORDERED size and limit price; dealt_qty/dealt_avg_price
+    are what actually filled.
+    """
     d = {
         "code": ["US.SOFI"] * 5,
         "stock_name": ["SoFi Technologies"] * 5,
         "order_market": ["US"] * 5,
         "trd_side": ["BUY"] * 5,
         "order_id": ["1", "2", "3", "4", "5"],
-        "qty": [100, 50, 30, 20, 10],
+        "qty": [100, 100, 100, 20, 10],
         "price": [10.0] * 5,
         "currency": ["USD"] * 5,
         "updated_time": ["2026-01-02 09:30:00"] * 5,
         "order_status": ["FILLED_ALL", "FILLED_PARTIAL",
                          "CANCELLED_PART_FILLED", "UNFILLED", "CANCELLED"],
     }
-    if with_filled_qty:
-        d["filled_qty"] = [100.0, 50.0, 30.0, 0.0, 0.0]
+    if with_dealt_cols:
+        # Order 2 filled 40 of 100; order 3 filled 30 of 100.
+        d["dealt_qty"] = [100.0, 40.0, 30.0, 0.0, 0.0]
+        d["dealt_avg_price"] = [9.99, 9.98, 9.97, 0.0, 0.0]
     return pd.DataFrame(d)
 
 
-def test_partial_fills_record_the_filled_portion():
-    out = cleanup_historical_orders(_raw_orders(with_filled_qty=True))
+def test_partial_fills_record_the_filled_quantity():
+    out = cleanup_historical_orders(_raw_orders(with_dealt_cols=True))
     assert set(out["Order_ID"]) == {"1", "2", "3"}  # UNFILLED / CANCELLED stay out
     q = dict(zip(out["Order_ID"], out["Quantity"]))
-    assert q["1"] == 100 and q["2"] == 50 and q["3"] == 30
+    # Order 2 was 40 of 100 filled -- must NOT be recorded as 100.
+    assert q["1"] == 100 and q["2"] == 40 and q["3"] == 30
 
 
-def test_partial_falls_back_to_ordered_qty_without_filled_col():
-    out = cleanup_historical_orders(_raw_orders(with_filled_qty=False))
+def test_fill_price_is_the_dealt_average_not_the_limit_price():
+    out = cleanup_historical_orders(_raw_orders(with_dealt_cols=True))
+    p = dict(zip(out["Order_ID"], out["Current_Price"]))
+    assert p["1"] == 9.99 and p["2"] == 9.98
+
+
+def test_orders_without_dealt_cols_fall_back_to_ordered_values():
+    """Older SDK payloads may omit dealt_*: fall back, don't crash."""
+    out = cleanup_historical_orders(_raw_orders(with_dealt_cols=False))
     assert set(out["Order_ID"]) == {"1", "2", "3"}
     q = dict(zip(out["Order_ID"], out["Quantity"]))
-    assert q["1"] == 100 and q["2"] == 50 and q["3"] == 30
+    p = dict(zip(out["Order_ID"], out["Current_Price"]))
+    assert q["2"] == 100 and p["2"] == 10.0
+
+
+def test_zero_dealt_price_does_not_overwrite_the_limit_price():
+    """A market order can report dealt_avg_price == 0 before the fill settles."""
+    df = _raw_orders(with_dealt_cols=True)
+    df.loc[df["order_id"] == "2", "dealt_avg_price"] = 0.0
+    out = cleanup_historical_orders(df)
+    p = dict(zip(out["Order_ID"], out["Current_Price"]))
+    assert p["2"] == 10.0  # kept the order price, not 0.0
 
 
 def test_option_multiplier_options():

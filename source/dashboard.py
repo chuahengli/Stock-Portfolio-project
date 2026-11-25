@@ -1,15 +1,17 @@
-from config import settings
+"""Plotly figures and DataFrame formatting for the Streamlit dashboard.
+
+Read-only. Static classification (sector / industry / country / market cap)
+comes from the `symbol_meta` table, populated by the batch. No network calls
+happen here: the 10s render loop must stay cheap and independent of yfinance.
+"""
 from source import db
 
-from datetime import date, datetime,timedelta
-import sqlite3
+from datetime import date, datetime, timedelta
 import pandas as pd
 import re
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import yfinance as yf
-import functools
 import numpy as np
 
 # Style Pandas dataframe
@@ -73,7 +75,7 @@ def plot_asset_allocation(df: pd.DataFrame):
     return fig
 
 def market_p_l_type(market: str):
-    # Only the most recent date-stamped snapshot (historical snapshots are preserved).
+    # Latest snapshot only; earlier dates remain queryable in net_p_l.
     query = "SELECT * FROM net_p_l WHERE date = (SELECT MAX(date) FROM net_p_l)"
     net_P_L = db.read_db(query)
     
@@ -110,9 +112,9 @@ def get_base_ticker(symbol: str, is_opt):
 def get_twr(df: pd.DataFrame, start_date: datetime = None, end_date: datetime = None):
     """Time-Weighted Return between two snapshot dates.
 
-    If start_date is None, it defaults to the earliest snapshot in `df` -- i.e. the
-    tracking inception (when data recording began). This removes the old hardcoded
-    reference date and keeps the measure anchored to real recorded data.
+    With start_date=None the window begins at the earliest snapshot in `df` --
+    the tracking inception. Anchoring to recorded data keeps the measure honest
+    rather than relying on a configured reference date.
     """
     if df is None or df.empty:
         return "N/A"
@@ -178,8 +180,10 @@ def config_datetime_axis_range(df: pd.DataFrame,y_metric: str, fig):
         yaxis_range=[y_min - buffer, y_max + buffer],
         xaxis_range=[min_date,max_date]
     )
-'''Deal with empty dataframes that can't be plotted'''
+
+
 def empty_fig():
+    """Placeholder figure when a DataFrame is empty."""
     fig = go.Figure()
     fig.add_annotation(
         text="No Data Available for selected range",
@@ -200,70 +204,15 @@ def empty_fig():
 
 def plot_asset_trend(df: pd.DataFrame):
     df['date'] = pd.to_datetime(df['date']).dt.date
-    # If dataframe empty, return empty plotly figure
     if df.empty:
         return empty_fig()
 
     fig = px.line(df, x='date', y='total_assets',
                 template='plotly_dark', height=400)
-    '''
-    # Points to annotate
-    point_indices = {
-        "Start": df.index[0],
-        "End": df.index[-1],
-        "Peak": df['total_assets'].idxmax(),
-        "Low": df['total_assets'].idxmin()
-    }
-
-    # Group labels by index to handle overlaps (e.g., End is also Peak)
-    labels_by_index = {}
-    for label, idx in point_indices.items():
-        if idx not in labels_by_index:
-            labels_by_index[idx] = []
-        labels_by_index[idx].append(label)
-
-    # Label unique points
-    for idx, labels in labels_by_index.items():
-        pt = df.loc[idx]
-        
-        # Determine the primary label for positioning logic (Peak/Low are most important)
-        if 'Peak' in labels:
-            primary_label = 'Peak'
-        elif 'Low' in labels:
-            primary_label = 'Low'
-        elif 'End' in labels:
-            primary_label = 'End'
-        else:
-            primary_label = 'Start'
-
-        ax, ay, x_anchor, y_anchor = config_plot_annotation(df, primary_label)
-        
-        # Combine labels for display text in a consistent order
-        display_text = " / ".join(sorted(labels, key=lambda x: ['Start', 'Low', 'Peak', 'End'].index(x)))
-        
-        fig.add_annotation(
-                    x=pt['date'],
-                    y=pt['total_assets'],
-                    text=f"<b>{display_text}</b><br>{pt['total_assets']:,.2f}",
-                    showarrow=False,
-                    ax=ax,
-                    ay=ay,
-                    xanchor=x_anchor,
-                    yanchor=y_anchor,
-                    font={'size': 14},
-                    opacity=0.7,
-                    align="center"
-                )
-    '''
-    '''
-    # Configure axis ranges to prevent cut off from containers
-    config_datetime_axis_range(df,'total_assets',fig)
-    '''
-    
     fig.update_traces(line=dict(width=4),
                       hovertemplate="<br>".join([
                             "Total Assets: $%{y:,.2f}",
-                            "<extra></extra>"  # Removes the trace name box on the side
+                            "<extra></extra>"
                         ])
         )
     fig.update_layout(
@@ -291,7 +240,7 @@ def comparison_df(portfolio_snapshots_df: pd.DataFrame, benchmark_df: pd.DataFra
     # Pivot the benchmark table so each Symbol is its own column
     # This turns [Date, Symbol, Close] into [Date, ^HSI, ^N225, ^STI]
     bench_pivoted = benchmark.pivot(index='Date', columns='Symbol', values='Close')
-    '''Rename the table names to indices name'''
+    # Rename columns from Yahoo ticker symbols to display index names
     indices_dict = db.indices_dict()
     for key,value in  indices_dict.items():
         if value in bench_pivoted.columns:
@@ -310,7 +259,7 @@ def comparison_df(portfolio_snapshots_df: pd.DataFrame, benchmark_df: pd.DataFra
 
 def comparison_percent(df: pd.DataFrame):
     percent_df = df.copy()
-    # Create the percentage change instead of values.
+    # Rebase each column to its first value as a percentage change.
     cols_to_normalize = percent_df.columns.drop('date')
     # Define first row as intitial, then apply percentage change from initial to all following rows of columns for nav and indices
     for col in cols_to_normalize:
@@ -329,7 +278,7 @@ def comparison_percent(df: pd.DataFrame):
 def plt_performance_comparison(percent_df: pd.DataFrame):
     fig = go.Figure()
     plt_cols = [col for col in percent_df.columns if col not in ['date','Portfolio']]
-    '''Function to format legend name for each line'''
+
     def get_legend_name(name, df_col):
         if not df_col.empty:
             last_val = df_col.iloc[-1]
@@ -396,32 +345,47 @@ def plt_performance_comparison(percent_df: pd.DataFrame):
 # Modify positions table to add the most information, to be filtered in other functions for displaying graphs and tables
 def display_pos(df: pd.DataFrame):
     pos_df = df.copy()
-    pos_df = pos_df[pos_df['Market_Value'] != 0]
+    pos_df = pos_df[pos_df['Market_Value'].notna() & (pos_df['Market_Value'] != 0)]
     # Add column is option or not
     option_pattern = r'[A-Z]+\d{6}[CP]\d+'
-    pos_df['Is_Option'] = pos_df['Symbol'].str.contains(option_pattern, regex=True)
+    pos_df['Is_Option'] = pos_df['Symbol'].astype(str).str.contains(option_pattern, regex=True)
     # Identify what Ticker, and if is option or stock
     pos_df['Ticker'] = pos_df.apply(lambda x: get_base_ticker(x['Symbol'], x['Is_Option']), axis=1)
     pos_df['Asset_Type'] = pos_df['Is_Option'].map({True: 'Option', False: 'Stock'})
 
     # Grouping and Sorting: Calculate total portfolio % per ticker to sort groups by size
     # Convert 'Portfolio_Percent' (e.g., "12.5%") to float for calculation
-    pos_df['Sort_Val'] = pos_df['Portfolio_Percent'].astype(str).str.rstrip('%').astype(float)
+    pos_df['Sort_Val'] = (pos_df['Portfolio_Percent'].astype(str).str.rstrip('%')
+                          .replace('', '0').astype(float))
     # Create new dataframe with each Ticker total percentage allocation for each ticker sum it 
     ticker_totals = pos_df.groupby('Ticker')['Sort_Val'].sum().reset_index(name='Ticker_Total_Val')
     # Merge onto Ticker column to match respective ticker, total ticker percentage on resepective ticker regardless option or stock
     pos_df = pos_df.merge(ticker_totals, on='Ticker')
     # Sort by each Ticker Total (desc), then by individual position value within each Ticker (desc)
     pos_df = pos_df.sort_values(by=['Ticker_Total_Val', 'Sort_Val'], ascending=[False, False])
-    pos_df['Market_Cap'] = pos_df['Ticker'].apply(lambda x: get_mktcap(x))
-    pos_df['Market_Cap_Cat'] = pos_df['Market_Cap'].apply(market_cap_class)
-    sector_map = {}
-    for ticker in pos_df['Ticker'].unique():
-        sector_map[ticker] = get_sector(ticker,datetime.now().strftime("%Y-%m"))
+    # Static classification comes from `symbol_meta` (written by the batch).
+    # No yfinance on a 10s render tick: a 401/429 must not blank the charts.
+    try:
+        meta = db.read_symbol_meta()
+    except Exception:
+        meta = pd.DataFrame()
+    meta = (meta.drop_duplicates(subset=['Symbol']).set_index('Symbol')
+            if not meta.empty and 'Symbol' in meta else None)
 
-    pos_df['Sector'] = pos_df['Ticker'].map(lambda x: sector_map[x][0])
-    pos_df['Industry'] = pos_df['Ticker'].map(lambda x: sector_map[x][1])
-    pos_df['Country'] = pos_df['Ticker'].apply(lambda x: get_country(x))
+    def lookup(ticker, col, default=None):
+        if meta is not None and ticker in meta.index:
+            val = meta.at[ticker, col]
+            if pd.notna(val) and str(val).strip() and str(val).strip().lower() != 'nan':
+                return val
+        return default
+
+    pos_df['Sector'] = pos_df['Ticker'].apply(lambda t: lookup(t, 'Sector', 'Unknown'))
+    pos_df['Industry'] = pos_df['Ticker'].apply(lambda t: lookup(t, 'Industry', 'Unknown'))
+    pos_df['Country'] = pos_df['Ticker'].apply(lambda t: lookup(t, 'Country', 'Unknown'))
+    pos_df['Market_Cap'] = pd.to_numeric(
+        pos_df['Ticker'].apply(lambda t: lookup(t, 'Market_Cap', None)), errors='coerce'
+    )
+    pos_df['Market_Cap_Cat'] = pos_df['Market_Cap'].apply(market_cap_class)
     return pos_df
 
 def style_pos(pos_df: pd.DataFrame):
@@ -451,57 +415,22 @@ def style_pos(pos_df: pd.DataFrame):
         "Today's P/L": '{:+,.2f}'
     }).hide(axis="index")
 
-# Get sector of ticker symbol passed in via yfinance
-@functools.lru_cache(maxsize=30)
-def get_sector(ticker_symbol,month_tag: datetime):
-    try:
-        ticker = yf.Ticker(ticker_symbol)
-        info = ticker.info
-        
-        # Check if it's an ETF. Then use the industry as the sector
-        quote_type = info.get('quoteType', 'UNKNOWN')
-        
-        if quote_type == 'ETF':
-            sector = info.get('category', info.get('fundFamily', 'Index/Fund'))
-            # Attempt to get the category or fund family for the industry column
-            industry = info.get('category', info.get('fundFamily', 'Index/Fund'))
-        else:
-            sector = info.get('sector', 'Other')
-            industry = info.get('industry', 'Other')
-            
-        return sector, industry
-    except Exception:
-        return 'Unknown', 'Unknown'
-
-    
 def positions_overview(pos_df: pd.DataFrame):
     pos_copy_df = pos_df.copy()
 
     # Group by Ticker and percentage alloc. Sum Market Value, Today's P/L and Total P/L
     position_overview = pos_copy_df.groupby(['Ticker','Ticker_Total_Val'])[['Market_Value','Today_s_P_L','P_L']].sum().reset_index()
     
-    # Get prices for stocks present in portfolio
-    prices_df = pos_copy_df.loc[pos_copy_df['Is_Option'] == False, ['Ticker', 'Current_Price']].drop_duplicates(subset=['Ticker'])
-    
-    # Identify tickers that only have options (missing from prices_df)
-    existing_tickers = set(prices_df['Ticker'])
-    all_tickers = set(position_overview['Ticker'])
-    missing_tickers = list(all_tickers - existing_tickers)
-    # Add missing tickers into prices_df with updated price from yfinance
-    if missing_tickers:
-        new_prices = []
-        for ticker in missing_tickers:
-            try:
-                # Use fast_info for better performance on single attributes
-                price = yf.Ticker(ticker).fast_info['last_price']
-                new_prices.append({'Ticker': ticker, 'Current_Price': price})
-            except Exception:
-                new_prices.append({'Ticker': ticker, 'Current_Price': 0.0})
-        
-        if new_prices:
-            prices_df = pd.concat([prices_df, pd.DataFrame(new_prices)], ignore_index=True)
-    # Add current price column to overview
+    # Current price comes from the stored position / live-quote row. Option-only
+    # tickers have no stock quote: show 0 instead of a network lookup on a 10s
+    # render tick (the old live lookup produced the 401/429 storms).
+    prices_df = (pos_copy_df.loc[pos_copy_df['Is_Option'] == False,
+                                ['Ticker', 'Current_Price']]
+                 .drop_duplicates(subset=['Ticker']))
     position_overview = position_overview.merge(prices_df, on='Ticker', how='left')
+    position_overview['Current_Price'] = pd.to_numeric(
+        position_overview['Current_Price'], errors='coerce'
+    ).fillna(0.0)
 
     # Condition for if option
     condition = pos_copy_df['Is_Option'] == False
@@ -525,101 +454,90 @@ def positions_overview(pos_df: pd.DataFrame):
     position_overview = position_overview.style.map(style_negative_red_positive_green, subset=['P_L', 'Today_s_P_L','P_L_Percent'])
     return position_overview
 
-@functools.lru_cache(maxsize=30)
-def get_mktcap(ticker: str,month_tag: datetime = datetime.now().strftime("%Y-%m")):
-    return yf.Ticker(ticker).info.get('marketCap')
-def market_cap_class(market_cap: float):
-    if pd.isna(market_cap):
+def market_cap_class(market_cap):
+    """Bucket a market cap. Non-numeric / missing -> 'Unknown' (never crash)."""
+    try:
+        v = float(market_cap)
+    except (TypeError, ValueError):
         return 'Unknown'
-    if market_cap > 200000000000:
+    if pd.isna(v) or v <= 0:
+        return 'Unknown'
+    if v > 200_000_000_000:
         return 'Mega'
-    elif market_cap > 10000000000:
+    if v > 10_000_000_000:
         return 'Large'
-    elif market_cap > 2000000000:
+    if v > 2_000_000_000:
         return 'Mid'
-    elif market_cap > 300000000:
+    if v > 300_000_000:
         return 'Small'
-    elif market_cap > 50000000:
+    if v > 50_000_000:
         return 'Micro'
-    elif market_cap < 50000000:
+    if v < 50_000_000:
         return 'Nano'
-    else:
-        return 'Unknown'
+    return 'Unknown'
 
-@functools.lru_cache(maxsize=30)
-def get_country(ticker: str,month_tag: datetime = datetime.now().strftime("%Y-%m")):
-    tk = yf.Ticker(ticker).info
-    try: 
-        return tk['country']
-    except Exception as e:
-        return None
 
 def plot_portfolio_characteristics(pos_df: pd.DataFrame):
-    # Grouping data for each subplot
-    sector_df = pos_df.groupby('Sector')['Sort_Val'].sum().reset_index().sort_values('Sort_Val')
-    geo_df = pos_df.groupby('Country')['Sort_Val'].sum().reset_index().sort_values('Sort_Val')
-    mc_df = pos_df.groupby('Market_Cap_Cat')['Sort_Val'].sum().reset_index().sort_values('Sort_Val')
-    mc_df = mc_df[mc_df['Market_Cap_Cat'] != 'Unknown']
-    '''Configure Subplots'''
+    """Three horizontal bars: Sector / Geography / Market Cap.
+
+    An empty group must not produce a NaN x-axis range -- that is exactly what
+    rendered the Geography and Market Cap panes blank. Missing metadata is shown
+    as its own 'Unknown' bucket instead of being silently dropped by groupby.
+    """
+    def _group(col):
+        g = pos_df.groupby(col, dropna=False)['Sort_Val'].sum().reset_index()
+        # Cast to string first: filling a float column with 'Unknown' raises a
+        # pandas 4 dtype warning and will break in a future version.
+        g[col] = (g[col].astype(object).where(g[col].notna(), 'Unknown')
+                  .astype(str).str.strip().replace({'': 'Unknown', 'nan': 'Unknown',
+                                                   'None': 'Unknown'}))
+        return g.sort_values('Sort_Val')
+
+    sector_df = _group('Sector')
+    geo_df = _group('Country')
+    mc_df = _group('Market_Cap_Cat')
+    # Keep 'Unknown' as a visible bucket. Dropping it is what used to
+    # leave the Market Cap pane completely blank when yfinance failed.
+
     fig = make_subplots(
         rows=2, cols=2,
-        specs=[
-            [{'type': 'bar'}, {'type': 'bar'}],
-            [{'type': 'bar'},None]
-            ],
-        subplot_titles=("Sector", "Geography", "Market Cap")
+        specs=[[{'type': 'bar'}, {'type': 'bar'}],
+               [{'type': 'bar'}, None]],
+        subplot_titles=("Sector", "Geography", "Market Cap"),
     )
-    '''Add traces, then label each bar with percentages'''
-    fig.add_trace(
-        go.Bar(
-            x=sector_df['Sort_Val'],
-            y=sector_df['Sector'],
-            orientation='h',
-            text = [f"{val:.2f}%" for val in sector_df['Sort_Val']],
-            textposition='outside',
-            cliponaxis=False,
-            name="Sector"),
-        row=1, col=1
-    )
-    fig.add_trace(
-        go.Bar(
-            x=geo_df['Sort_Val'],
-            y=geo_df['Country'],
-            orientation='h',
-            text = [f"{val:.2f}%" for val in geo_df['Sort_Val']],
-            textposition='outside',
-            cliponaxis=False,
-            name="Geography"),
-        row=1, col=2
-    )
-    fig.add_trace(
-        go.Bar(
-            x=mc_df['Sort_Val'],
-            y=mc_df['Market_Cap_Cat'],
-            orientation='h',
-            text = [f"{val:.2f}%" for val in mc_df['Sort_Val']],
-            textposition='outside',
-            cliponaxis=False,
-            name="Market Cap"),
-        row=2, col=1
-    )
+    groups = [
+        (1, 1, sector_df, 'Sector', 'Sector'),
+        (1, 2, geo_df, 'Country', 'Geography'),
+        (2, 1, mc_df, 'Market_Cap_Cat', 'Market Cap'),
+    ]
+    for r, c, g, col, name in groups:
+        fig.add_trace(
+            go.Bar(
+                x=g['Sort_Val'], y=g[col], orientation='h',
+                text=[f"{v:.2f}%" for v in g['Sort_Val']],
+                textposition='outside', cliponaxis=False, name=name,
+                marker=dict(color='#D4AF37'),
+            ), row=r, col=c,
+        )
     fig.update_layout(
-        template='plotly_dark',
-        showlegend=False,
-        font=dict(size=14),
-        height=800,
-        bargap=0.2,
-        margin=dict(l=150),
-        hovermode=False
+        template='plotly_dark', showlegend=False, font=dict(size=14),
+        height=800, bargap=0.2, margin=dict(l=150), hovermode=False,
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
     )
-    '''Configure axis ranges so they don't get cutoff'''
-    fig.update_xaxes(range=[0, sector_df['Sort_Val'].max() * 1.2], row=1, col=1)
-    fig.update_xaxes(range=[0, geo_df['Sort_Val'].max() * 1.2], row=1, col=2)
-    fig.update_xaxes(range=[0, mc_df['Sort_Val'].max() * 1.2], row=2, col=1)
-
-    fig.update_xaxes(
-        visible = False
-    )
+    for r, c, g, _, name in groups:
+        top = float(g['Sort_Val'].max()) if len(g) and pd.notna(g['Sort_Val'].max()) else 0.0
+        fig.update_xaxes(range=[0, top * 1.2 if top > 0 else 1], row=r, col=c)
+        if g.empty:
+            axis_num = {(1, 1): 1, (1, 2): 2, (2, 1): 3}[(r, c)]
+            try:
+                fig.add_annotation(
+                    text=f"No data ({name})", x=0.5, y=0.5,
+                    xref=f"x{axis_num} domain", yref=f"y{axis_num} domain",
+                    showarrow=False, font=dict(size=14, color='#9A9A9A'),
+                )
+            except Exception:
+                pass
+    fig.update_xaxes(visible=False)
     fig.update_yaxes(tickfont=dict(size=14))
     return fig
 
