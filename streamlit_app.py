@@ -1,19 +1,12 @@
+"""Streamlit dashboard. Read-only -- main.py is the only database writer."""
 import streamlit as st
 import pandas as pd
-import sqlite3
 from datetime import datetime, date, timedelta
 import subprocess
 import sys
 from pathlib import Path
-import plotly.express as px
 
-# moomoo_api and main are deliberately NOT imported: this app never writes.
-from source import dashboard, db
-from config import settings
-
-# The dashboard is read-only. main.py (run by run_daily.bat, or via the sidebar
-# Refresh button as a subprocess) is the single writer. Live Mode only re-reads
-# the database every 10s; it never causes a write.
+from source import dashboard, db, live
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 
@@ -52,10 +45,28 @@ st.set_page_config(
 # --- Main Dashboard ---
 st.title("📈 Moomoo Portfolio Dashboard", text_alignment = 'center')
 # --- Live Mode Toggle ---
-live_mode = st.toggle("🔴 Live Mode", value=True, help="Re-read the database every 10 seconds so the view follows the latest batch run. The dashboard is read-only; it never writes.")
 refresh_rate = 10
+live_mode = st.toggle(
+    "🔴 Live Mode", value=True,
+    help="Re-read the database every 10 seconds and poll moomoo quotes into "
+         "the live layer. The nightly batch remains the only writer of record.",
+)
+poller = live.LivePoller.get(refresh_rate)
+
+# A previous app process may have been killed without running cleanup. Wipe
+# its stale quotes and "connected" flag ONCE per Streamlit session (session
+# state survives fragment reruns, so this does not run on every 10s tick).
+if "live_session_initialised" not in st.session_state:
+    st.session_state["live_session_initialised"] = True
+    try:
+        db.clear_live_layer()
+    except Exception:
+        pass
+
 if live_mode:
-        st.caption(f"Re-reading every {refresh_rate}s...")
+    poller.start()
+else:
+    poller.stop()
 
 # --- Manual refresh: the ONE way the UI can cause a write ---
 with st.sidebar:
@@ -106,10 +117,37 @@ def combined_data(table_name: str):
     return full_df
 
 
+def render_live_status():
+    """Show what the 10s cycle actually does, and the age of the broker data."""
+    state, detail = db.get_live_status()
+    # The batch date is the last nightly snapshot, not the internal
+    # symbol_meta flag (which is a maintenance detail).
+    try:
+        d = db.get_latest_db_date()
+        batch_asof = d.strftime('%Y-%m-%d') if d else "never"
+    except Exception:
+        batch_asof = "never"
+    label = {"connected": "connected", "starting": "starting",
+             "disconnected": "reconnecting", "error": "quote error",
+             "idle": "off"}.get(state, state)
+    colour = {"connected": "#4CAF50", "error": "#E57373",
+              "disconnected": "#D4AF37"}.get(state, "#9A9A9A")
+    st.markdown(
+        f"<span style='font-size:0.85rem;color:#9A9A9A;'>"
+        f"Live poll: <span style='color:{colour};'>{label}</span> · "
+        f"batch: {batch_asof} · re-reading every {refresh_rate}s</span>",
+        unsafe_allow_html=True,
+    )
+    if state == "error" and detail:
+        with st.expander("Quote error detail"):
+            st.code(detail)
 
 
-@st.fragment(run_every=refresh_rate if live_mode else None)
+
+
+@st.fragment(run_every=refresh_rate)
 def render_live():
+    render_live_status()
     current_time = datetime.now().strftime('%b %d, %Y %H:%M:%S')
     latest_date = db.get_latest_db_date(datetime.combine(date.today(), datetime.min.time()))
     
@@ -119,9 +157,24 @@ def render_live():
     
     previous_date = latest_date - timedelta(days=1)
     portfolio_snapshots_df = combined_data('portfolio_snapshots')
-    benchmark_df = combined_data('benchmark_history')                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
-    pos_df = db.read_db(f"SELECT * FROM positions WHERE date = '{latest_date.strftime('%Y-%m-%d')}'")
-    pos_df=dashboard.display_pos(pos_df)
+    benchmark_df = combined_data('benchmark_history')
+    # Live layer: when a fresh moomoo quote snapshot exists, overlay it on the
+    # batch's positions (same schema). The batch-owned tables are never written
+    # from this render loop.
+    live_acct = db.read_live_account()
+    live_q = db.read_live_quotes()
+    use_live = (not live_acct.empty and not live_q.empty
+                and 'as_of' in live_acct.columns
+                and str(live_acct.iloc[0].get('as_of') or '')[:10]
+                    == date.today().strftime('%Y-%m-%d'))
+    if use_live:
+        pos_df = live_q.copy()
+        st.caption(f"Live moomoo quotes · {live_acct.iloc[0]['as_of']}")
+    else:
+        pos_df = db.read_db(
+            f"SELECT * FROM positions WHERE date = '{latest_date.strftime('%Y-%m-%d')}'"
+        )
+    pos_df = dashboard.display_pos(pos_df)
 
     # --- Top Metrics Row ---
     snapshot_df = portfolio_snapshots_df.loc[portfolio_snapshots_df['date'] == latest_date.strftime('%Y-%m-%d')]
@@ -171,16 +224,11 @@ def render_live():
         col2.metric("Stocks", f"${col2_metric:,.2f}", delta=col2_delta)
         col3.metric("Options", f"${col3_metric:,.2f}", delta=col3_delta)
         col4.metric("Cash Balance", f"${col4_metric:,.2f}", delta=col4_delta)
-        #col5.metric("NAV", f"{col5_metric:.4f}",delta=col5_delta)
-        col6.metric("Last Updated", current_time)
+        col6.metric("Refreshed", current_time)
     # --- Tabs for different views ---
     overview, positions, p_l_analysis, ledger = st.tabs(["📊 Overview", "📋 Positions", "💰 P/L Analysis", "Trade Ledger"])
 
     with overview:
-        # col_left, col_right = st.columns(2)
-        
-        
-        #st.subheader("Asset Allocation",text_alignment = 'center')
         # Get allocation data for the specific date
         inception_date = db.get_inception_date()
         returns_str = dashboard.get_twr(portfolio_snapshots_df, inception_date, latest_date)

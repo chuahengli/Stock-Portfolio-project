@@ -1,3 +1,4 @@
+"""SQLite schema, upserts, NAV/unit maths, and price-history refresh."""
 from source.cleanup import convert_currency,get_exchange_rate
 from config import settings 
 
@@ -31,7 +32,7 @@ def db_contextmanager():
 
 
 def init_db():
-    # Create portfolio_snapshots table
+    """Create all SQLite tables if they do not exist and apply idempotent schema migrations."""
     portfolio_snapshots_table ="""
     CREATE TABLE IF NOT EXISTS portfolio_snapshots (
         date TEXT PRIMARY KEY,
@@ -43,7 +44,6 @@ def init_db():
         units NUMERIC
     )
     """
-    # Create the Positions table
     positions_table = """
     CREATE TABLE IF NOT EXISTS positions (
         Symbol TEXT,
@@ -63,7 +63,6 @@ def init_db():
         PRIMARY KEY(Symbol, date) 
     )
     """
-    # Create historical_orders table
     historical_orders_table = """
     CREATE TABLE IF NOT EXISTS historical_orders (
         Symbol TEXT,
@@ -77,7 +76,6 @@ def init_db():
         date_time TEXT
     )
     """
-    # Create cashflow table
     cashflow_table = """
     CREATE TABLE IF NOT EXISTS cashflow (
         cashflow_id TEXT PRIMARY KEY,
@@ -91,7 +89,6 @@ def init_db():
         is_income NUMERIC
     )
     """
-    # Create net_p_l table
     net_p_l_table = """
     CREATE TABLE IF NOT EXISTS net_p_l (
         date TEXT,
@@ -128,7 +125,6 @@ def init_db():
     )
     """
 
-    # Create benchmark indices table
     benchmark_history_table = """
     CREATE TABLE IF NOT EXISTS benchmark_history (
         Date TEXT,
@@ -142,8 +138,8 @@ def init_db():
     )
     """
 
-    # Create per-symbol price history table (individual holdings, same schema
-    # as benchmark_history; kept separate so the two exports stay clean)
+    # Per-symbol price history (individual holdings, same schema as
+    # benchmark_history; kept separate so the two exports stay clean)
     symbol_price_history_table = """
     CREATE TABLE IF NOT EXISTS symbol_price_history (
         Date TEXT,
@@ -157,6 +153,53 @@ def init_db():
     )
     """
 
+    # Static per-symbol classification (sector / industry / country / market cap).
+    # Written by the batch (main.refresh_symbol_meta), read by the dashboard.
+    # Keeping it in the DB means the 10s render loop never calls yfinance.
+    symbol_meta_table = """
+    CREATE TABLE IF NOT EXISTS symbol_meta (
+        Symbol TEXT PRIMARY KEY,
+        Sector TEXT,
+        Industry TEXT,
+        Country TEXT,
+        Market_Cap NUMERIC,
+        Updated_At TEXT
+    )
+    """
+
+    # Live moomoo quote layer. Written ONLY by source.live.LivePoller (background
+    # thread), read by the dashboard. Kept separate from the batch-owned
+    # portfolio_snapshots/positions tables so a 10s quote tick can never race
+    # the nightly batch's FK-ordered write or drift NAV/units.
+    live_account_table = """
+    CREATE TABLE IF NOT EXISTS live_account (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        total_assets NUMERIC,
+        stocks NUMERIC,
+        options NUMERIC,
+        cash NUMERIC,
+        as_of TEXT
+    )
+    """
+    live_quotes_table = """
+    CREATE TABLE IF NOT EXISTS live_quotes (
+        Symbol TEXT PRIMARY KEY,
+        Name TEXT,
+        Market TEXT,
+        Quantity NUMERIC,
+        Diluted_Cost NUMERIC,
+        Current_Price NUMERIC,
+        Market_Value NUMERIC,
+        P_L_Percent NUMERIC,
+        P_L NUMERIC,
+        Today_s_P_L NUMERIC,
+        Currency TEXT,
+        Portfolio_Percent REAL,
+        date TEXT,
+        as_of TEXT
+    )
+    """
+
     with db_contextmanager() as conn:
         cursor = conn.cursor()
         cursor.execute(portfolio_snapshots_table)
@@ -167,6 +210,9 @@ def init_db():
         cursor.execute(transactions_table)
         cursor.execute(benchmark_history_table)
         cursor.execute(symbol_price_history_table)
+        cursor.execute(symbol_meta_table)
+        cursor.execute(live_account_table)
+        cursor.execute(live_quotes_table)
         cursor.execute(app_meta_table)
         _ensure_cashflow_income_column(conn)
         _migrate_net_p_l(conn)
@@ -224,11 +270,10 @@ def prev_nav_units(before_date: str = None):
 def net_cashflow(start_date_exclusive: str, end_date: str):
     """Net EXTERNAL cash flow (converted to SGD) in (start_date_exclusive, end_date].
 
-    calc_nav_units passes (previous snapshot date, today): flows that landed on
-    days WITHOUT a snapshot (weekends, batch outages) must be captured here --
-    the old same-date-only lookup silently dropped them forever, polluting
-    NAV/units. Flows ON the start date are excluded: they were already counted
-    in that snapshot's own units (no double count)."""
+    calc_nav_units passes (previous snapshot date, today) so flows that landed on
+    days without a snapshot (weekends, batch outages) are included. Flows on the
+    start date are excluded because they were already counted in that snapshot's units.
+    """
     query = (
         f"SELECT cashflow_id, Date, Currency, Amount FROM cashflow "
         f"WHERE Date > '{start_date_exclusive}' AND Date <= '{end_date}' "
@@ -251,16 +296,22 @@ def prev_snapshot_date(before_date: str):
 
 def last_cashflow_date():
     """Latest cashflow clearing date in the DB (None when the table is empty)."""
-    df = read_db("SELECT MAX(Date) AS d FROM cashflow")
+    try:
+        df = read_db("SELECT MAX(Date) AS d FROM cashflow")
+    except Exception:
+        return None
     if not df.empty and pd.notna(df.iloc[0]['d']):
         return df.iloc[0]['d']
     return None
 
 
 def get_meta(key: str, default=None):
-    with db_contextmanager() as conn:
-        row = conn.execute("SELECT value FROM app_meta WHERE key = ?", (key,)).fetchone()
-    return row[0] if row else default
+    try:
+        with db_contextmanager() as conn:
+            row = conn.execute("SELECT value FROM app_meta WHERE key = ?", (key,)).fetchone()
+        return row[0] if row else default
+    except sqlite3.OperationalError:
+        return default
 
 
 def set_meta(key: str, value: str):
@@ -281,23 +332,32 @@ def missing_price_symbols():
     return sorted(held - have)
 
 def calc_nav_units(current_date: datetime, snapshot_df: pd.DataFrame):
+    """Compute today's NAV and unit count (TWR unitisation).
+
+    NAV per unit moves only with market performance. External cash flows change
+    the number of units instead, so a deposit cannot flatter the return:
+
+        new_nav   = (total_assets - net_external_cashflow) / previous_units
+        new_units = previous_units + (net_external_cashflow / new_nav)
+
+    The first snapshot seeds 1000 units at the opening NAV.
+    """
     total_assets = snapshot_df.loc[0, 'total_assets']
-    # Based on cash flow since the previous snapshot, DO the NAV calculation
     date_str = current_date.strftime('%Y-%m-%d')
     prev_date = prev_snapshot_date(date_str)
     prev_nav, prev_units = prev_nav_units(date_str)
     if prev_units == 0 or prev_date is None:
-        # First entry
+        # First entry: seed the fund at 1000 units.
         new_units = 1000.0
         new_nav = total_assets / new_units
         net_cf = 0.0
     else:
-        # ALL external flows since the previous snapshot adjust NAV *units* at
-        # today's NAV (daily-granularity TWR treatment). Flows that landed on
-        # days without a snapshot are picked up by the window, not lost.
+        # Every external flow since the previous snapshot adjusts units at
+        # today's NAV. Flows landing on days without a snapshot are caught by
+        # the window rather than dropped.
         net_cf = net_cashflow(prev_date, date_str)
-        # New NAV = (Ending Value - Net Cash Flow) / Previous Units
-        # NAV only changed with market movement, not cash flow in/out
+
+        # NAV changed only with market movement, not cash flow in/out
         new_nav = (total_assets - net_cf) / prev_units
         new_units = prev_units + (net_cf / new_nav)
     print(f"Update Complete. New NAV: {new_nav:.4f}, Net CF: {net_cf:.2f}, New Units: {new_units:.4f}")
@@ -333,45 +393,44 @@ def unrealised_p_l(today_date: datetime):
 
 
 def net_p_l(today_date: datetime):
-    # Regex to identify options (Standard: Root + 6 digits + C/P + 8 digits)
+    """Aggregate realised order cash flows plus current position values/P&L by symbol, market, and currency."""
     option_pattern = r'[A-Z]+\d{6}[CP]\d+'
     historical_orders_p_l = historical_orders_data()
 
-    # Calculate 'Change'
-    # BUY = Negative (Cost), SELL = Positive(Revenue)
+    # BUY = Negative (Cost), SELL = Positive (Revenue)
     historical_orders_p_l['Change'] = historical_orders_p_l.apply(calculate_change, axis=1)
 
-    # Group by columns and sum up those of the same symbol to get net P/L (Excluding those in current positions/hodlings)
     historical_orders_p_l = historical_orders_p_l.groupby(['Symbol', 'Market', 'Currency'])[['Change']].sum().reset_index().rename(columns={'Change': 'Net_P_L'})
     
-    # Get current positions market value and unrealised P/L to calculate net P/L
     positions_mv = unrealised_p_l(today_date)
-    # Define condition if is option, if option use P_L, otherwise use Market_Vaue 
+    # Options contribute unrealised P_L; stocks contribute current Market_Value.
     condition = positions_mv['Symbol'].astype(str).str.contains(option_pattern, regex=True)
     positions_mv['Net_P_L'] = np.where(
         condition, 
-        positions_mv['P_L'],          # Use value from 'P_L' column
-        positions_mv['Market_Value']  # Use value from 'Market_Value' column
+        positions_mv['P_L'],
+        positions_mv['Market_Value']
     )
     
     positions_mv.drop(['Market_Value','P_L'], axis=1, inplace=True) 
-    # Concat, then do the same group by and sum to get true net P/L
     dfs = [df for df in [historical_orders_p_l, positions_mv] if not df.empty]
     if dfs:
         net_P_L = pd.concat(dfs, ignore_index=True)
     else:
-        # Return empty dataframe with correct columns if both are empty
         net_P_L = historical_orders_p_l
 
     net_P_L = net_P_L.groupby(['Symbol', 'Market', 'Currency'])[['Net_P_L']].sum().reset_index()
-    # Date-stamp the snapshot so P/L history is preserved (not overwritten) day to day.
+    # date is part of the PK, so each run's P/L row is retained alongside previous runs.
     net_P_L['date'] = today_date.strftime('%Y-%m-%d')
     return net_P_L
 
-# Helper to get the latest available date in portfolio_snapshots table
-def get_latest_db_date(today_date: datetime):
+
+def get_latest_db_date(today_date: datetime = None):
+    """Latest snapshot date in portfolio_snapshots as a datetime, or None if empty."""
     query = "SELECT date FROM portfolio_snapshots ORDER BY date DESC LIMIT 1"
-    df = read_db(query)
+    try:
+        df = read_db(query)
+    except Exception:
+        return None
     if not df.empty:
         return datetime.strptime(df.iloc[0]['date'], '%Y-%m-%d')
     return None
@@ -638,6 +697,139 @@ def sync_transactions():
              "Quantity", "Fill_Price", "Multiplier", "Gross_Amount", "Currency"]]
     insert_dataframe(df, "transactions")
     print(f"Synced {len(df)} rows into the transactions (audit) ledger.")
+
+
+# ---------------------------------------------------------------------------
+# symbol_meta: static classification, written by the batch, read by the dashboard
+# ---------------------------------------------------------------------------
+
+def read_symbol_meta() -> pd.DataFrame:
+    """All cached symbol classifications. Empty frame with the right columns when none."""
+    cols = ["Symbol", "Sector", "Industry", "Country", "Market_Cap", "Updated_At"]
+    try:
+        df = read_db("SELECT Symbol, Sector, Industry, Country, Market_Cap, Updated_At FROM symbol_meta")
+    except sqlite3.OperationalError:
+        return pd.DataFrame(columns=cols)
+    return df if not df.empty else pd.DataFrame(columns=cols)
+
+
+def upsert_symbol_meta(rows: list[dict]) -> int:
+    """Insert/replace static classification rows. Returns rows written."""
+    if not rows:
+        return 0
+    df = pd.DataFrame(rows)[
+        ["Symbol", "Sector", "Industry", "Country", "Market_Cap", "Updated_At"]
+    ]
+    insert_dataframe(df, "symbol_meta")
+    return len(df)
+
+
+# ---------------------------------------------------------------------------
+# Stored FX rate: lets the 10s live snapshot revalue USD holdings without a
+# yfinance round-trip. The batch refreshes it; the dashboard only reads it.
+# ---------------------------------------------------------------------------
+
+def get_stored_fx_rate(from_ccy: str = "USD", to_ccy: str = "SGD") -> float | None:
+    """Last known rate, or None. Keyed by pair so a missing rate is explicit."""
+    key = f"fx_{from_ccy.upper()}_{to_ccy.upper()}"
+    val = get_meta(key)
+    try:
+        return float(val) if val is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def store_fx_rate(rate: float, from_ccy: str = "USD", to_ccy: str = "SGD") -> None:
+    set_meta(f"fx_{from_ccy.upper()}_{to_ccy.upper()}", f"{rate}")
+
+
+def convert_currency_cached(value, from_ccy: str, to_ccy: str = "SGD"):
+    """Convert using the stored rate; never hits the network. Raises on a
+    missing rate -- a silent 1.0 would corrupt every downstream total."""
+    fc, tc = str(from_ccy).strip().upper(), str(to_ccy).strip().upper()
+    if fc == tc:
+        return round(float(value), 2)
+    rate = get_stored_fx_rate(fc, tc)
+    if rate is None or rate <= 0:
+        raise RuntimeError(f"no stored FX rate for {fc}->{tc}; run the batch first")
+    return round(float(value) * rate, 2)
+
+
+# ---------------------------------------------------------------------------
+# Live moomoo quote layer (background poller writes, dashboard reads)
+# ---------------------------------------------------------------------------
+
+def write_live_snapshot(account: dict, quotes: list[dict]) -> None:
+    """Atomically replace the live account row and the live quote rows.
+
+    Called from the poller thread only. Never touches batch-owned tables.
+    """
+    acct = pd.DataFrame([{
+        "id": 1,
+        "total_assets": account.get("total_assets"),
+        "stocks": account.get("stocks"),
+        "options": account.get("options"),
+        "cash": account.get("cash"),
+        "as_of": account.get("as_of"),
+    }])
+    qdf = pd.DataFrame(quotes)
+    with db_contextmanager() as conn:
+        conn.execute("DELETE FROM live_quotes")
+        acct.to_sql("tmp_live_acct", conn, if_exists="replace", index=False)
+        conn.execute(
+            "INSERT OR REPLACE INTO live_account "
+            "(id,total_assets,stocks,options,cash,as_of) "
+            "SELECT id,total_assets,stocks,options,cash,as_of FROM tmp_live_acct"
+        )
+        conn.execute("DROP TABLE tmp_live_acct")
+        if not qdf.empty:
+            cols = ["Symbol", "Name", "Market", "Quantity", "Diluted_Cost",
+                    "Current_Price", "Market_Value", "P_L_Percent", "P_L",
+                    "Today_s_P_L", "Currency", "Portfolio_Percent", "date", "as_of"]
+            qdf = qdf.reindex(columns=cols)
+            qdf.to_sql("tmp_live_quotes", conn, if_exists="replace", index=False)
+            conn.execute(
+                "INSERT OR REPLACE INTO live_quotes (" + ",".join(cols) + ") "
+                "SELECT " + ",".join(cols) + " FROM tmp_live_quotes"
+            )
+            conn.execute("DROP TABLE tmp_live_quotes")
+
+
+def read_live_account() -> pd.DataFrame:
+    try:
+        return read_db("SELECT * FROM live_account WHERE id = 1")
+    except sqlite3.OperationalError:
+        return pd.DataFrame()
+
+
+def read_live_quotes() -> pd.DataFrame:
+    try:
+        return read_db("SELECT * FROM live_quotes")
+    except sqlite3.OperationalError:
+        return pd.DataFrame()
+
+
+def set_live_status(state: str, detail: str = "") -> None:
+    set_meta("live_poller_state", state)
+    set_meta("live_poller_detail", detail)
+
+
+def clear_live_layer() -> None:
+    """Drop stale live rows and reset the status. Called at startup so a
+    crashed previous session cannot leave the dashboard showing 'connected'
+    quotes that no poller is refreshing."""
+    try:
+        with db_contextmanager() as conn:
+            conn.execute("DELETE FROM live_quotes")
+            conn.execute("DELETE FROM live_account")
+    except sqlite3.OperationalError:
+        pass
+    set_live_status("idle", "Starting fresh session.")
+
+
+def get_live_status() -> tuple[str, str]:
+    return (get_meta("live_poller_state", "idle") or "idle",
+            get_meta("live_poller_detail", "") or "")
 
 
 def main():

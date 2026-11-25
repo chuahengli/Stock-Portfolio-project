@@ -1,15 +1,14 @@
-from source import moomoo_api, cleanup, db, dashboard
+"""Entry point: fetch from the broker, clean, and store one day's snapshot."""
+from source import moomoo_api, cleanup, db
+from source.export_powerbi import fetch_symbol_meta_bulk, load_meta
 from config import settings
-from datetime import date, datetime,timedelta
-import matplotlib.pyplot as plt
+from datetime import date, datetime, timedelta
 import os
-import subprocess
 import pandas as pd
 
 
 def _summarize_frame(name, df, extra=""):
-    """Log a concise summary of a dataframe instead of dumping its full contents
-    (keeps daily_log.txt small -- the file used to grow to tens of MB)."""
+    """Log a row/column summary instead of dumping the frame (keeps the log small)."""
     if df is None:
         print(f"{name}: None")
     elif hasattr(df, "shape"):
@@ -18,19 +17,6 @@ def _summarize_frame(name, df, extra=""):
         print(f"{name}: present{extra}")
 
 
-
-'''
-TESTING PURPOSES ONLY
-
-current_date = [
-                datetime.combine(date.today(), datetime.min.time()),
-                datetime.combine(date.today(), datetime.min.time()) - timedelta(days=30),
-                datetime.combine(date.today(), datetime.min.time()) - timedelta(days=60),
-                datetime.combine(date.today(), datetime.min.time()) - timedelta(days=90),
-                datetime.strptime('2023-08-07', '%Y-%m-%d')
-                ]
-                
-'''
 def get_api_data(current_date: datetime, end_date: datetime, keep_opend_alive: bool = False):
     ## Handle API
     # Initialize variables to None 
@@ -65,14 +51,7 @@ def cleanup_data(acc_info: pd.DataFrame, positions: pd.DataFrame, cashflow: pd.D
     _summarize_frame("Positions", positions)
     _summarize_frame("Cashflow", cashflow)
     _summarize_frame("Historical Orders", historical_orders)
-    '''
-    print ("Total Assets: ",cleanup.get_total_assets(acc_info))
-    print ("Securities assets: ",cleanup.get_securities_assets(acc_info))
-    print ("Cash: ",cleanup.get_cash(acc_info))
-    print ("Bonds: ",cleanup.get_bonds(acc_info))
-    '''
 
-    
     # Split shares and options positions into separate dataframes
     shares, options = cleanup.separate_assets(positions)
     _summarize_frame("Shares Dataframe", shares)
@@ -112,6 +91,18 @@ def update_db(snapshot_df: pd.DataFrame, positions_df: pd.DataFrame, cashflow: p
     """
     db.init_db()
 
+    # Store the USD->SGD rate the batch used, so the 10s live poller can
+    # revalue holdings without a yfinance round-trip. Best-effort: a failed FX
+    # fetch must not abort the batch.
+    try:
+        rate = cleanup.get_exchange_rate(
+            "USD", "SGD", current_date.strftime("%Y-%m-%d-%H")
+        )
+        db.store_fx_rate(rate, "USD", "SGD")
+        print(f"Stored FX rate USD->SGD: {rate}")
+    except Exception as e:
+        print(f"FX rate unavailable ({e}); live poller will fall back to stored rate.")
+
     if cashflow.empty:
         print("Skipping cashflow database update due to empty results.")
     else:
@@ -129,11 +120,18 @@ def update_db(snapshot_df: pd.DataFrame, positions_df: pd.DataFrame, cashflow: p
 
     db.insert_dataframe(db.net_p_l(current_date), 'net_p_l')
 
-    
-    # Index + per-symbol price history: ~57 yfinance downloads per pass. The
-    # Streamlit live fragment calls update_db every 10 seconds, so this is
-    # gated to once per calendar day (app_meta flag); a same-day re-run only
-    # backfills symbols seen for the first time.
+    # Static classification for the dashboard. Best-effort and gated to once a
+    # day: it never fails the batch and never runs on the 10s render loop.
+    if db.get_meta("last_symbol_meta_update") != current_date.strftime('%Y-%m-%d'):
+        try:
+            refresh_symbol_meta(allow_network=True)
+            db.set_meta("last_symbol_meta_update", current_date.strftime('%Y-%m-%d'))
+        except Exception as e:
+            print(f"symbol_meta refresh skipped ({e}).")
+
+    # Index + per-symbol price history: ~57 yfinance downloads per pass, so it
+    # is gated to once per calendar day via an app_meta flag. A same-day re-run
+    # of main.py only backfills symbols seen for the first time.
     if not db.prices_updated_today():
         indices_dict = db.indices_dict()
         for index_name, ticker in indices_dict.items():
@@ -148,6 +146,46 @@ def update_db(snapshot_df: pd.DataFrame, positions_df: pd.DataFrame, cashflow: p
             db.update_symbol_price(s)
 
     return 0
+
+
+def refresh_symbol_meta(allow_network: bool = True) -> int:
+    """Persist static classification (sector/industry/country/market cap) for
+    every underlier ever held, into `symbol_meta`. The dashboard reads this
+    table on every 10s tick instead of calling yfinance. Best-effort: a failed
+    fetch still writes the cached Sector/Industry/Country so the charts render.
+    """
+    from datetime import date as _date
+    syms = db.position_stock_symbols()
+    # Options map to their underlying root; only equities have classification.
+    import re
+    occ = re.compile(r'^([A-Z]{1,6})\d{6}[CP]\d{4,}$')
+    roots = sorted({occ.match(s).group(1) if occ.match(s) else s for s in syms})
+    if not roots:
+        return 0
+    venues = {}
+    try:
+        for s, mkt in db.read_db(
+            "SELECT DISTINCT Symbol, Market FROM positions WHERE Market IS NOT NULL"
+        ).itertuples(index=False):
+            venues[s] = (mkt or "").strip().upper()
+    except Exception:
+        pass
+    try:
+        existing = {r["Symbol"]: r for r in
+                    db.read_symbol_meta().to_dict("records")}
+    except Exception:
+        existing = {}
+    meta = fetch_symbol_meta_bulk(roots, venues=venues,
+                                  allow_network=allow_network, existing=existing)
+    now = _date.today().strftime("%Y-%m-%d")
+    rows = [
+        {"Symbol": t, "Sector": v["Sector"], "Industry": v["Industry"],
+         "Country": v["Country"], "Market_Cap": v["Market_Cap"], "Updated_At": now}
+        for t, v in meta.items()
+    ]
+    n = db.upsert_symbol_meta(rows)
+    print(f"symbol_meta refreshed: {n} symbols (network={'on' if allow_network else 'off'}).")
+    return n
 
 
 def upload_to_db(current_date: datetime, end_date: datetime, keep_opend_alive: bool = False):
@@ -180,15 +218,15 @@ def main():
     beginning_date = settings.START_DATE
 
     # --- Database Update Logic ---
-    if not os.path.exists(settings.MOOMOO_PORTFOLIO_DB_PATH):
-        print("Database not found. Initializing and fetching all historical data...")
-        upload_to_db(today_date, beginning_date,keep_opend_alive=False)
-
+    if not os.path.exists(settings.MOOMOO_PORTFOLIO_DB_PATH) or db.get_latest_db_date() is None:
+        print("Database not found or empty. Initializing and fetching all historical data...")
+        rc = upload_to_db(today_date, beginning_date, keep_opend_alive=False)
     else:
-        upload_to_db(today_date, cashflow_start_date(today_date), keep_opend_alive=False)
-    
-    print("Database initialized successfully.")
-    return 0
+        rc = upload_to_db(today_date, cashflow_start_date(today_date), keep_opend_alive=False)
+
+    if rc == 0:
+        print("Database initialized successfully.")
+    return rc
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

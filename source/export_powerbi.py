@@ -231,6 +231,79 @@ def enrich(tickers: list[str], meta: dict, allow_network: bool,
     return meta
 
 
+def fetch_symbol_meta_bulk(tickers: list[str], venues: dict[str, str] | None = None,
+                           allow_network: bool = True,
+                           existing: dict[str, dict] | None = None) -> dict[str, dict]:
+    """Build the dashboard's static classification map for `tickers`.
+
+    Returns {symbol: {Sector, Industry, Country, Market_Cap}}. This is the ONE
+    place yfinance sector/country/market-cap metadata is fetched; the batch
+    persists the result into the `symbol_meta` table so the 10s render loop
+    never calls yfinance. Network is best-effort: a failed fetch falls back to
+    the JSON cache (Sector/Industry/Country) and leaves Market_Cap unknown, so
+    a 401/429 can never blank the dashboard's charts.
+    """
+    import yfinance as yf
+    venues = venues or {}
+    meta = load_meta()
+    existing = existing or {}
+    out: dict[str, dict] = {}
+    for t in sorted(set(tickers)):
+        sector = industry = country = ""
+        cap = None
+        # Prefer the DB row (persisted by the batch) over the JSON cache.
+        db_row = existing.get(t) or {}
+        if db_row:
+            sector = str(db_row.get("Sector") or "").strip()
+            industry = str(db_row.get("Industry") or "").strip()
+            country = str(db_row.get("Country") or "").strip()
+            try:
+                cap = float(db_row.get("Market_Cap")) if db_row.get("Market_Cap") is not None else None
+            except (TypeError, ValueError):
+                cap = None
+        cached = meta.get(t) or {}
+        if not sector and _meta_filled(cached):
+            sector = str(cached.get("Sector") or "").strip()
+            industry = str(cached.get("Industry") or "").strip()
+            country = str(cached.get("Country") or "").strip()
+        # Only hit the network for rows with no usable classification at all.
+        # A 401/429 then cannot blank the dashboard, and a normal batch run
+        # does not re-download ~55 symbols every day.
+        if allow_network and (not sector or cap is None):
+            info: dict = {}
+            for cand in _ticker_candidates(t, venues.get(t, "")):
+                cand_info = _fetch_info(yf, cand)
+                if cand_info and _has_metadata(cand_info):
+                    info = cand_info
+                    break
+            if info:
+                sector = (info.get("sector") or info.get("Sector") or sector or "").strip()
+                industry = (info.get("industry") or info.get("Industry") or industry or "").strip()
+                country = (info.get("country") or info.get("Country") or country or "").strip()
+                if not country and info.get("exchange") in EXCHANGE_COUNTRY:
+                    country = EXCHANGE_COUNTRY[info["exchange"]]
+                try:
+                    cap = float(info.get("marketCap")) if info.get("marketCap") else None
+                except (TypeError, ValueError):
+                    cap = None
+                # Keep the JSON cache warm for the Power BI export too.
+                if sector or industry or country:
+                    meta[t] = {"Sector": sector, "Industry": industry, "Country": country}
+                time.sleep(0.05)
+        out[t] = {
+            "Sector": sector or "Unknown",
+            "Industry": industry or "Unknown",
+            "Country": country or None,
+            "Market_Cap": cap,
+        }
+    if allow_network:
+        try:
+            save_meta(meta)
+        except Exception:
+            pass
+    return out
+
+
 def build_dim_symbol(conn: sqlite3.Connection, allow_network: bool) -> pd.DataFrame:
     cur = conn.cursor()
 
@@ -363,8 +436,7 @@ def build_fact_cashflow(conn: sqlite3.Connection) -> pd.DataFrame:
             return "Dividend Income"
         return "Internal"
     df["CashflowCategory"] = df.apply(_flow, axis=1)
-    # Remarks come from moomoo and can carry trailing newlines; a newline inside a
-    # quoted CSV field breaks line-oriented readers (bit 2026-10-03: OU8 dividend).
+    # Moomoo remarks can carry trailing newlines; an embedded newline breaks line-oriented CSV readers.
     df["Remark"] = df["Remark"].fillna("").astype(str).str.strip()
     return df
 
@@ -379,16 +451,16 @@ def build_fact_trades(conn: sqlite3.Connection) -> pd.DataFrame:
 
 
 def build_fact_benchmark(conn: sqlite3.Connection, inception: str) -> pd.DataFrame:
-    # Window the benchmark to the tracked period only (was ~98k rows back to 1927).
+    # Window to the tracked period: benchmark_history holds full index history
+    # (back to 1927) and only rows from inception onward are meaningful here.
     df = pd.read_sql_query(
         "SELECT Symbol, substr(Date,1,10) AS Date, Close FROM benchmark_history "
         "WHERE substr(Date,1,10) >= ? ORDER BY Date, Symbol",
         conn, params=(inception,),
     )
-    # Dedupe: one row per (Date, Symbol). Legacy timestamped PK rows ('... 00:00:00')
-    # collapse onto their bare-date twin here; the non-null Close wins, so an
-    # all-NULL leftover row can never blank the CSV day (bit 2026-09-01: NULL
-    # ^GSPC/^IXIC 08-28 row killed two return days per index downstream).
+    # One row per (Date, Symbol). Timestamped and bare-date rows for the same day
+    # collapse onto each other; the non-null Close wins so a leftover all-NULL row
+    # cannot blank a date and drop a return day downstream.
     df = (df.sort_values(["Date", "Symbol", "Close"], na_position="last")
             .drop_duplicates(subset=["Date", "Symbol"], keep="last"))
     return df[["Date", "Symbol", "Close"]]
@@ -398,8 +470,8 @@ def build_fact_prices(conn: sqlite3.Connection, inception: str) -> pd.DataFrame:
     # Per-symbol daily closes for everything ever held. Windowed to the tracked
     # period (yfinance backfills 'max' -- e.g. 40y of KO would swamp the CSVs);
     # scoping to current holdings happens in DAX, not here, so the file stays
-    # stable when positions change. Same dedupe guard as build_fact_benchmark:
-    # if this table ever grows timestamped PK rows again they collapse cleanly.
+    # stable when positions change. Dedupe guard: timestamped and bare-date rows
+    # for one day collapse onto each other.
     df = pd.read_sql_query(
         "SELECT Symbol, substr(Date,1,10) AS Date, Close FROM symbol_price_history "
         "WHERE substr(Date,1,10) >= ? ORDER BY Date, Symbol",
